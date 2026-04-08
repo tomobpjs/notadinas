@@ -1,54 +1,38 @@
-```react
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { 
   getFirestore, 
   collection, 
-  doc, 
+  addDoc, 
   onSnapshot, 
   updateDoc, 
-  deleteDoc,
-  addDoc,
-  query
+  doc, 
+  query, 
+  serverTimestamp 
 } from 'firebase/firestore';
 import { 
-  getAuth, 
-  signInAnonymously, 
-  signInWithCustomToken, 
-  onAuthStateChanged 
-} from 'firebase/auth';
-import { 
   LayoutDashboard, 
-  Database, 
   FileText, 
-  PlusCircle, 
-  Trash2, 
-  XCircle, 
-  Search, 
-  BarChart3, 
+  Database, 
+  PackageCheck, 
+  FileBarChart, 
   Plus, 
-  Minus, 
-  Cloud, 
-  RotateCcw, 
-  CheckCircle2, 
-  Edit3,
-  ClipboardList,
-  CheckCircle,
-  Clock,
-  ArrowRight,
-  FileBox,
-  Files,
-  Timer,
+  Trash2, 
+  Save, 
+  Search,
   Download,
-  Filter,
-  PackageCheck,
   Camera,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  RotateCcw,
   AlertCircle,
-  History,
-  Loader2
+  Edit3,
+  X
 } from 'lucide-react';
 
-// Firebase Configuration
+// --- Firebase Configuration ---
 const firebaseConfig = {
   apiKey: "AIzaSyAOAMNE1yBVB09dbO-4Rr-D7KPODU0-694",
   authDomain: "notadinasrt.firebaseapp.com",
@@ -59,670 +43,506 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-  
-  // Serah Terima State
-  const [selectedSerahId, setSelectedSerahId] = useState('');
-  const [photoProof, setPhotoProof] = useState('');
-  const [isSubmittingSerah, setIsSubmittingSerah] = useState(false);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'nota-dinas-app';
 
-  // Laporan Filter
-  const [reportMonth, setReportMonth] = useState((new Date().getMonth() + 1).toString().padStart(2, '0'));
-  const [reportYear, setReportYear] = useState(new Date().getFullYear().toString());
-  const [reportCategory, setReportCategory] = useState('Semua');
+// --- Sub-Components ---
+const NavItem = ({ icon, label, id, activeTab, setActiveTab }) => (
+  <button
+    onClick={() => setActiveTab(id)}
+    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
+      activeTab === id ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+    }`}
+  >
+    {icon}
+    <span className="font-medium text-sm">{label}</span>
+  </button>
+);
+
+const StatCard = ({ label, count, color, icon }) => {
+  const colors = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    yellow: 'bg-yellow-50 text-yellow-600 border-yellow-100',
+    indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+    green: 'bg-green-50 text-green-600 border-green-100',
+    red: 'bg-red-50 text-red-600 border-red-100',
+    gray: 'bg-slate-50 text-slate-600 border-slate-100'
+  };
+  return (
+    <div className={`p-4 rounded-2xl border ${colors[color]} flex flex-col items-center justify-center text-center shadow-sm`}>
+      <div className="mb-2 opacity-80">{icon}</div>
+      <span className="text-2xl font-bold block">{count}</span>
+      <span className="text-xs uppercase font-bold opacity-70 tracking-wide">{label}</span>
+    </div>
+  );
+};
+
+const App = () => {
+  const [user, setUser] = useState(null);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [submissions, setSubmissions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingDoc, setEditingDoc] = useState(null);
 
   // Form State
-  const initialForm = {
+  const [formData, setFormData] = useState({
+    kategori: 'Nota Dinas',
     tanggal: new Date().toISOString().split('T')[0],
-    namaPemohon: '',
-    unit: '',
-    kategori: 'Nota Dinas', 
-    items: [{ namaBarang: '', spesifikasi: '', jumlah: 1, alasan: '' }],
-    status: 'Proses',
-    penerima: '' // Field tambahan untuk sinkronisasi dengan modul serah terima
-  };
-  const [formData, setFormData] = useState(initialForm);
+    pemohon: '',
+    unitKerja: '',
+    items: [{ id: Date.now(), namaBarang: '', spesifikasi: '', jumlah: '', alasan: '' }]
+  });
 
-  // Auth (Rule 3)
+  // Filter State
+  const [filter, setFilter] = useState({
+    bulan: new Date().getMonth() + 1,
+    tahun: new Date().getFullYear(),
+    kategori: 'Semua'
+  });
+
   useEffect(() => {
     const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        await signInAnonymously(auth);
+      try {
+        // Mencoba masuk dengan custom token lingkungan jika ada
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          try {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } catch (tokenError) {
+            // Jika token mismatch (biasanya karena pindah project), gunakan fallback Anonymous
+            console.warn("Custom token mismatch, falling back to Anonymous auth.");
+            await signInAnonymously(auth);
+          }
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Auth error detail:", error);
       }
     };
     initAuth();
-    return onAuthStateChanged(auth, setUser);
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
   }, []);
 
-  // Sync Data (Rule 1)
   useEffect(() => {
     if (!user) return;
-    const q = collection(db, 'artifacts', appId, 'public', 'data', 'pengajuan');
-    return onSnapshot(q, (snapshot) => {
+    const q = collection(db, 'artifacts', appId, 'public', 'data', 'submissions');
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       setSubmissions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
-    }, (err) => console.error("Firestore Error:", err));
+    }, (err) => { 
+      console.error("Firestore error:", err);
+      setLoading(false); 
+    });
+    return () => unsubscribe();
   }, [user]);
 
-  const showNotify = (msg, type = 'success') => {
-    setNotification({ msg, type });
-    setTimeout(() => setNotification(null), 3000);
-  };
-
-  const globalStats = useMemo(() => {
-    const total = submissions.length;
-    const finished = submissions.filter(d => d.status === 'Selesai').length;
-    const process = submissions.filter(d => d.status === 'Proses').length;
-    const pending = submissions.filter(d => d.status === 'Pending').length;
-    return { total, finished, process, pending };
-  }, [submissions]);
-
-  const handleMainChange = (e) => setFormData({...formData, [e.target.name]: e.target.value});
-  
-  const handleItemChange = (index, field, value) => {
-    const newItems = [...formData.items];
-    newItems[index][field] = value;
-    setFormData({...formData, items: newItems});
-  };
-
-  const addItem = () => setFormData({...formData, items: [...formData.items, { namaBarang: '', spesifikasi: '', jumlah: 1, alasan: '' }]});
-  
-  const removeItem = (index) => {
-    if (formData.items.length > 1) {
-      setFormData({...formData, items: formData.items.filter((_, i) => i !== index)});
+  // Logic Handlers
+  const handleItemChange = (index, field, value, isEdit = false) => {
+    if (isEdit) {
+      setEditingDoc(prev => {
+        const newItems = [...prev.items];
+        newItems[index] = { ...newItems[index], [field]: value };
+        return { ...prev, items: newItems };
+      });
+    } else {
+      setFormData(prev => {
+        const newItems = [...prev.items];
+        newItems[index] = { ...newItems[index], [field]: value };
+        return { ...prev, items: newItems };
+      });
     }
+  };
+
+  const addItem = (isEdit = false) => {
+    const newItem = { id: Date.now(), namaBarang: '', spesifikasi: '', jumlah: '', alasan: '' };
+    if (isEdit) setEditingDoc(p => ({ ...p, items: [...p.items, newItem] }));
+    else setFormData(p => ({ ...p, items: [...p.items, newItem] }));
+  };
+
+  const removeItem = (index, isEdit = false) => {
+    if (isEdit) setEditingDoc(p => ({ ...p, items: p.items.filter((_, i) => i !== index) }));
+    else setFormData(p => ({ ...p, items: p.items.filter((_, i) => i !== index) }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!user) return;
-
-    try {
-      if (editingId) {
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'pengajuan', editingId);
-        await updateDoc(docRef, { ...formData });
-        setEditingId(null);
-        showNotify("Data berhasil diperbarui");
-      } else {
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'pengajuan'), {
-          ...formData,
-          userId: user.uid,
-          createdAt: new Date().toISOString()
-        });
-        showNotify("Pengajuan baru berhasil disimpan");
-      }
-      setFormData(initialForm);
-      setActiveTab('database');
-    } catch (err) {
-      showNotify("Gagal menyimpan data", "error");
-    }
+    const kode = `${formData.kategori === 'Nota Dinas' ? 'ND' : 'FORM'}-${formData.tanggal.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'submissions'), {
+      ...formData,
+      kodeUnik: kode,
+      status: 'Pending',
+      createdAt: serverTimestamp()
+    });
+    setFormData({ kategori: 'Nota Dinas', tanggal: new Date().toISOString().split('T')[0], pemohon: '', unitKerja: '', items: [{ id: Date.now(), namaBarang: '', spesifikasi: '', jumlah: '', alasan: '' }] });
+    setActiveTab('database');
   };
 
-  const handleSerahTerima = async (e) => {
+  const handleUpdate = async (e) => {
     e.preventDefault();
-    if (!selectedSerahId || !photoProof) {
-      showNotify("Pilih pengajuan dan ambil foto bukti", "error");
-      return;
-    }
-
-    setIsSubmittingSerah(true);
-    try {
-      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'pengajuan', selectedSerahId);
-      await updateDoc(docRef, {
-        status: 'Selesai',
-        buktiFoto: photoProof,
-        waktuSelesai: new Date().toISOString()
-      });
-      showNotify("Serah terima berhasil diselesaikan!");
-      setSelectedSerahId('');
-      setPhotoProof('');
-      setActiveTab('database');
-    } catch (error) {
-      showNotify("Gagal memproses serah terima", "error");
-    } finally {
-      setIsSubmittingSerah(false);
-    }
-  };
-
-  const updateStatus = async (id, newStatus) => {
     if (!user) return;
-    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'pengajuan', id);
-    await updateDoc(docRef, { status: newStatus });
+    const { id, createdAt, ...updateData } = editingDoc;
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', id), updateData);
+    setIsEditModalOpen(false);
   };
 
-  const startEdit = (submission) => {
-    setFormData({
-      tanggal: submission.tanggal,
-      namaPemohon: submission.namaPemohon,
-      unit: submission.unit,
-      kategori: submission.kategori || 'Nota Dinas',
-      items: submission.items,
-      status: submission.status,
-      penerima: submission.penerima || ''
-    });
-    setEditingId(submission.id);
-    setActiveTab('dashboard');
-  };
-
-  const getStatusStyle = (status) => {
-    switch (status) {
-      case 'Selesai': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      case 'Ditolak': return 'bg-rose-100 text-rose-700 border-rose-200';
-      case 'Pending': return 'bg-amber-100 text-amber-700 border-amber-200';
-      default: return 'bg-orange-100 text-orange-700 border-orange-200';
-    }
-  };
-
-  const downloadAsJpg = async () => {
-    if (!reportRef.current) return;
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-    script.onload = () => {
-      window.html2canvas(reportRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-      }).then(canvas => {
-        const link = document.createElement('a');
-        link.download = `Rekap_Nota_Serah_${reportMonth}_${reportYear}.jpg`;
-        link.href = canvas.toDataURL('image/jpeg', 0.9);
-        link.click();
-      });
-    };
-    document.head.appendChild(script);
-  };
-
-  const filteredReports = useMemo(() => {
-    return submissions.filter(s => {
-      const d = new Date(s.tanggal);
-      const matchesDate = (d.getMonth() + 1).toString().padStart(2, '0') === reportMonth && d.getFullYear().toString() === reportYear;
-      const matchesCategory = reportCategory === 'Semua' || s.kategori === reportCategory;
-      return matchesDate && matchesCategory;
-    });
-  }, [submissions, reportMonth, reportYear, reportCategory]);
-
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900">
-      <div className="flex flex-col items-center gap-4">
-        <Loader2 className="animate-spin text-indigo-500" size={48} />
-        <p className="text-white font-black uppercase tracking-widest text-xs">Menghubungkan Cloud...</p>
+  // Views
+  const renderDashboard = () => (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-slate-800">Dashboard Utama</h2>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <StatCard label="Total" count={submissions.length} color="blue" icon={<Database size={20}/>} />
+        <StatCard label="Pending" count={submissions.filter(s => s.status === 'Pending').length} color="yellow" icon={<Clock size={20}/>} />
+        <StatCard label="Proses" count={submissions.filter(s => s.status === 'Proses').length} color="indigo" icon={<RotateCcw size={20}/>} />
+        <StatCard label="Selesai" count={submissions.filter(s => s.status === 'Selesai').length} color="green" icon={<CheckCircle2 size={20}/>} />
+        <StatCard label="Ditolak" count={submissions.filter(s => s.status === 'Ditolak').length} color="red" icon={<XCircle size={20}/>} />
+        <StatCard label="Cancel" count={submissions.filter(s => s.status === 'Cancel').length} color="gray" icon={<AlertCircle size={20}/>} />
       </div>
     </div>
   );
 
-  return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans text-slate-800">
-      {/* SIDEBAR */}
-      <aside className="w-full md:w-64 bg-slate-900 p-6 flex flex-col gap-2 shrink-0 shadow-xl z-20">
-        <div className="flex items-center gap-3 mb-8 px-2">
-          <div className="bg-indigo-600 p-2.5 rounded-xl text-white shadow-lg shadow-indigo-900/20"><FileText size={22}/></div>
-          <h1 className="text-xl font-black text-white tracking-tighter uppercase leading-none">E-Nota<br/><span className="text-indigo-400 text-[10px] tracking-[0.3em]">SERAH TERIMA</span></h1>
+  const renderForm = () => (
+    <div className="max-w-4xl mx-auto">
+      <h2 className="text-2xl font-bold mb-6 text-slate-800">Pengajuan Baru</h2>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-500 uppercase">Kategori</label>
+            <select className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.kategori} onChange={e => setFormData({...formData, kategori: e.target.value})}>
+              <option>Nota Dinas</option><option>Formulir</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-500 uppercase">Tanggal</label>
+            <input type="date" className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.tanggal} onChange={e => setFormData({...formData, tanggal: e.target.value})} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-500 uppercase">Pemohon</label>
+            <input type="text" className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.pemohon} onChange={e => setFormData({...formData, pemohon: e.target.value})} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-500 uppercase">Unit Kerja</label>
+            <input type="text" className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.unitKerja} onChange={e => setFormData({...formData, unitKerja: e.target.value})} />
+          </div>
         </div>
-        
-        <nav className="flex flex-col gap-1">
-          <button onClick={() => setActiveTab('dashboard')} className={`p-3.5 rounded-xl flex items-center gap-3 transition-all text-sm font-bold ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/40' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}><LayoutDashboard size={18}/> Dashboard</button>
-          <button onClick={() => setActiveTab('database')} className={`p-3.5 rounded-xl flex items-center gap-3 transition-all text-sm font-bold ${activeTab === 'database' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/40' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}><Database size={18}/> Database Cloud</button>
-          <button onClick={() => setActiveTab('serah-terima')} className={`p-3.5 rounded-xl flex items-center gap-3 transition-all text-sm font-bold ${activeTab === 'serah-terima' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/40' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}><PackageCheck size={18}/> Serah Terima</button>
-          <button onClick={() => setActiveTab('report')} className={`p-3.5 rounded-xl flex items-center gap-3 transition-all text-sm font-bold ${activeTab === 'report' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/40' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}><BarChart3 size={18}/> Laporan</button>
-        </nav>
 
-        <div className="mt-auto p-4 bg-slate-800/50 rounded-2xl border border-slate-700/50">
-          <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Sesi Aktif</p>
-          <p className="text-[10px] font-bold text-indigo-400 truncate">{user?.uid}</p>
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-bold text-slate-700">Rincian Barang</h3>
+            <button type="button" onClick={() => addItem(false)} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-100">+ Tambah Baris</button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="p-3 text-left">Nama Barang</th>
+                  <th className="p-3 text-left">Spesifikasi</th>
+                  <th className="p-3 text-center w-20">Jumlah</th>
+                  <th className="p-3 text-left">Alasan Pengajuan</th>
+                  <th className="p-3 w-10"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {formData.items.map((item, idx) => (
+                  <tr key={item.id}>
+                    <td className="p-2"><input type="text" className="w-full outline-none bg-transparent border-b border-transparent focus:border-blue-400" placeholder="..." value={item.namaBarang} onChange={e => handleItemChange(idx, 'namaBarang', e.target.value)} /></td>
+                    <td className="p-2"><input type="text" className="w-full outline-none bg-transparent border-b border-transparent focus:border-blue-400" placeholder="..." value={item.spesifikasi} onChange={e => handleItemChange(idx, 'spesifikasi', e.target.value)} /></td>
+                    <td className="p-2"><input type="number" className="w-full outline-none bg-transparent text-center border-b border-transparent focus:border-blue-400" value={item.jumlah} onChange={e => handleItemChange(idx, 'jumlah', e.target.value)} /></td>
+                    <td className="p-2"><input type="text" className="w-full outline-none bg-transparent border-b border-transparent focus:border-blue-400" placeholder="..." value={item.alasan} onChange={e => handleItemChange(idx, 'alasan', e.target.value)} /></td>
+                    <td className="p-2 text-center"><button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 transition-colors"><Trash2 size={16}/></button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </aside>
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={() => setActiveTab('dashboard')} className="px-6 py-2 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition-all">Batal</button>
+          <button type="submit" className="px-8 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all">Kirim Pengajuan</button>
+        </div>
+      </form>
+    </div>
+  );
 
-      {/* MAIN CONTENT */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* TOP NAVBAR */}
-        <header className="bg-white border-b px-8 py-4 flex justify-between items-center shrink-0">
-          <h2 className="font-black text-slate-800 uppercase tracking-tight text-lg">
-            {activeTab.replace('-', ' ')}
-          </h2>
-          <div className="flex items-center gap-4">
-             {notification && (
-                <div className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 animate-in fade-in slide-in-from-top-2 ${notification.type === 'success' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
-                   {notification.type === 'success' ? <CheckCircle size={14}/> : <AlertCircle size={14}/>}
-                   {notification.msg}
+  const renderDatabase = () => (
+    <div className="space-y-4">
+      <h2 className="text-2xl font-bold text-slate-800">Database Pengajuan</h2>
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-slate-50 text-slate-500 border-b">
+            <tr>
+              <th className="px-6 py-4">Kode</th>
+              <th className="px-6 py-4">Pemohon</th>
+              <th className="px-6 py-4">Rincian & Alasan</th>
+              <th className="px-6 py-4">Status</th>
+              <th className="px-6 py-4">Aksi</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {submissions.map(s => (
+              <tr key={s.id} className="hover:bg-slate-50/50">
+                <td className="px-6 py-4 font-bold text-slate-700">{s.kodeUnik}</td>
+                <td className="px-6 py-4">
+                  <div className="font-semibold text-slate-800">{s.pemohon}</div>
+                  <div className="text-xs text-slate-400">{s.unitKerja}</div>
+                </td>
+                <td className="px-6 py-4">
+                  {s.items.map((it, i) => (
+                    <div key={i} className="mb-1">
+                      <span className="font-medium text-slate-700">• {it.namaBarang}</span>
+                      <span className="text-xs text-slate-500 block ml-3 italic">Alasan: {it.alasan || '-'}</span>
+                    </div>
+                  ))}
+                </td>
+                <td className="px-6 py-4">
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${
+                    s.status === 'Pending' ? 'bg-yellow-50 text-yellow-600 border-yellow-100' :
+                    s.status === 'Proses' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                    s.status === 'Selesai' ? 'bg-green-50 text-green-600 border-green-100' : 'bg-red-50 text-red-600 border-red-100'
+                  }`}>{s.status}</span>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex gap-2">
+                    <button onClick={() => { setEditingDoc(s); setIsEditModalOpen(true); }} className="p-1.5 text-slate-400 hover:text-blue-600"><Edit3 size={16}/></button>
+                    <select className="text-[10px] p-1 border rounded bg-white text-slate-600 focus:ring-1 focus:ring-blue-400 outline-none" value={s.status} onChange={async (e) => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', s.id), { status: e.target.value })}>
+                      <option value="Pending">Pending</option><option value="Proses">Proses</option><option value="Selesai">Selesai</option><option value="Ditolak">Ditolak</option><option value="Cancel">Cancel</option>
+                    </select>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {isEditModalOpen && editingDoc && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center"><h3 className="font-bold text-slate-800">Edit Pengajuan</h3><button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button></div>
+            <div className="p-6 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Pemohon</label>
+                  <input className="w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-blue-500" value={editingDoc.pemohon} onChange={e => setEditingDoc({...editingDoc, pemohon: e.target.value})} placeholder="Pemohon" />
                 </div>
-             )}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Unit Kerja</label>
+                  <input className="w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-blue-500" value={editingDoc.unitKerja} onChange={e => setEditingDoc({...editingDoc, unitKerja: e.target.value})} placeholder="Unit Kerja" />
+                </div>
+              </div>
+              <table className="w-full text-sm">
+                <thead><tr className="text-slate-400 text-xs text-left"><th>Nama</th><th>Spek</th><th className="w-16 text-center">Jml</th><th>Alasan</th><th className="w-8"></th></tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {editingDoc.items.map((item, idx) => (
+                    <tr key={item.id}>
+                      <td className="p-1"><input className="w-full py-2 border-b border-transparent focus:border-blue-400 outline-none" value={item.namaBarang} onChange={e => handleItemChange(idx, 'namaBarang', e.target.value, true)} /></td>
+                      <td className="p-1"><input className="w-full py-2 border-b border-transparent focus:border-blue-400 outline-none" value={item.spesifikasi} onChange={e => handleItemChange(idx, 'spesifikasi', e.target.value, true)} /></td>
+                      <td className="p-1"><input className="w-full py-2 border-b border-transparent focus:border-blue-400 outline-none text-center" value={item.jumlah} onChange={e => handleItemChange(idx, 'jumlah', e.target.value, true)} /></td>
+                      <td className="p-1"><input className="w-full py-2 border-b border-transparent focus:border-blue-400 outline-none" value={item.alasan} onChange={e => handleItemChange(idx, 'alasan', e.target.value, true)} /></td>
+                      <td className="p-1 text-center"><button onClick={() => removeItem(idx, true)} className="text-red-400 hover:text-red-600" disabled={editingDoc.items.length === 1}><Trash2 size={14}/></button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button onClick={() => addItem(true)} className="text-xs text-blue-600 font-bold hover:underline">+ Tambah Baris</button>
+            </div>
+            <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
+              <button onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-white">Batal</button>
+              <button onClick={handleUpdate} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-all">Simpan Perubahan</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderDelivery = () => (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="space-y-4">
+        <h3 className="font-bold flex items-center gap-2 text-slate-800"><PackageCheck size={18} className="text-blue-600"/> Rekap Siap Serah Terima</h3>
+        <div className="space-y-3">
+          {submissions.filter(s => s.status === 'Pending' || s.status === 'Proses').map(s => (
+            <div key={s.id} className="p-4 bg-white border border-slate-200 rounded-xl hover:border-blue-500 cursor-pointer transition-all shadow-sm">
+              <div className="flex justify-between font-bold text-blue-600 mb-1"><span>{s.kodeUnik}</span><span className="text-[10px] uppercase text-slate-400">{s.status}</span></div>
+              <p className="text-sm font-semibold text-slate-700">{s.pemohon} - {s.unitKerja}</p>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {s.items.map((it, i) => <span key={i} className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded uppercase font-bold border border-slate-200">{it.namaBarang}</span>)}
+              </div>
+            </div>
+          ))}
+          {submissions.filter(s => s.status === 'Pending' || s.status === 'Proses').length === 0 && (
+            <div className="p-10 text-center text-slate-400 bg-white border border-dashed rounded-xl italic">Tidak ada item yang perlu diserahterimakan saat ini.</div>
+          )}
+        </div>
+      </div>
+      <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm h-fit space-y-6">
+        <h3 className="font-bold text-slate-800">Konfirmasi Penerimaan</h3>
+        <div className="aspect-video bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-slate-400 group cursor-pointer hover:bg-slate-100 hover:border-blue-300 transition-all">
+          <Camera size={40} className="mb-2 group-hover:text-blue-500 transition-colors"/>
+          <p className="text-xs">Klik untuk upload bukti serah terima</p>
+          <span className="text-[10px] mt-1 opacity-60">(Opsional)</span>
+        </div>
+        <button className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">Konfirmasi Selesai</button>
+      </div>
+    </div>
+  );
+
+  const renderReport = () => {
+    const data = submissions.filter(s => {
+      const d = new Date(s.tanggal);
+      return (d.getMonth()+1 === parseInt(filter.bulan)) && (d.getFullYear() === parseInt(filter.tahun)) && (filter.kategori === 'Semua' || s.kategori === filter.kategori);
+    });
+
+    const getStatusColor = (status) => {
+      switch(status) {
+        case 'Pending': return 'bg-yellow-50 text-yellow-700 border-yellow-200';
+        case 'Proses': return 'bg-blue-50 text-blue-700 border-blue-200';
+        case 'Selesai': return 'bg-green-50 text-green-700 border-green-200';
+        case 'Ditolak': 
+        case 'Cancel': return 'bg-red-50 text-red-700 border-red-200';
+        default: return 'bg-slate-50 text-slate-700 border-slate-200';
+      }
+    };
+
+    return (
+      <div className="space-y-6">
+        <header className="flex justify-between items-center print:hidden">
+          <h2 className="text-2xl font-bold text-slate-800">Laporan Bulanan</h2>
+          <div className="flex gap-2">
+            <select className="p-2 border border-slate-200 rounded-lg text-sm bg-white" value={filter.kategori} onChange={e => setFilter({...filter, kategori: e.target.value})}><option value="Semua">Semua Kategori</option><option value="Nota Dinas">Nota Dinas</option><option value="Formulir">Formulir</option></select>
+            <select className="p-2 border border-slate-200 rounded-lg text-sm bg-white" value={filter.bulan} onChange={e => setFilter({...filter, bulan: e.target.value})}>{[...Array(12)].map((_, i) => <option key={i+1} value={i+1}>{new Date(0, i).toLocaleString('id', {month: 'long'})}</option>)}</select>
+            <button onClick={() => window.print()} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all"><Download size={16}/> Cetak Rekapan</button>
           </div>
         </header>
-
-        <div className="flex-1 overflow-y-auto p-4 md:p-8">
-          {activeTab === 'dashboard' && (
-            <div className="max-w-6xl mx-auto space-y-6">
-              {/* STATS */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center gap-4 shadow-sm">
-                  <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><ClipboardList size={24}/></div>
-                  <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Nota</p><p className="text-xl font-black">{globalStats.total}</p></div>
-                </div>
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center gap-4 shadow-sm">
-                  <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl"><CheckCircle size={24}/></div>
-                  <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Selesai</p><p className="text-xl font-black">{globalStats.finished}</p></div>
-                </div>
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center gap-4 shadow-sm">
-                  <div className="p-3 bg-orange-50 text-orange-600 rounded-xl"><Clock size={24}/></div>
-                  <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Proses</p><p className="text-xl font-black">{globalStats.process}</p></div>
-                </div>
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center gap-4 shadow-sm">
-                  <div className="p-3 bg-amber-50 text-amber-600 rounded-xl"><Timer size={24}/></div>
-                  <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pending</p><p className="text-xl font-black">{globalStats.pending}</p></div>
-                </div>
-              </div>
-
-              {/* INPUT FORM */}
-              <form onSubmit={handleSubmit} className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200 space-y-8">
-                <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-                  <h3 className="font-black text-lg flex items-center gap-2 uppercase tracking-tight text-slate-800">
-                    {editingId ? <Edit3 className="text-amber-500" /> : <PlusCircle className="text-indigo-500" />} 
-                    {editingId ? 'Edit Pengajuan' : 'Input Pengajuan Baru'}
-                  </h3>
-                  {editingId && (
-                    <button type="button" onClick={() => {setEditingId(null); setFormData(initialForm);}} className="text-[10px] font-black text-rose-500 border border-rose-100 px-3 py-1 rounded-full hover:bg-rose-50 transition-all uppercase">Batal Edit</button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Tanggal</label>
-                    <input type="date" name="tanggal" required className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-100" value={formData.tanggal} onChange={handleMainChange} />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nama Pemohon</label>
-                    <input type="text" name="namaPemohon" placeholder="Nama Pemesan" required className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-100" value={formData.namaPemohon} onChange={handleMainChange} />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nama Penerima</label>
-                    <input type="text" name="penerima" placeholder="Nama Penerima Barang" required className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-100" value={formData.penerima} onChange={handleMainChange} />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Unit Kerja</label>
-                    <select name="unit" required className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-100" value={formData.unit} onChange={handleMainChange}>
-                      <option value="">Pilih Unit</option>
-                      <option value="IT Support">IT Support</option>
-                      <option value="SDM">SDM</option>
-                      <option value="Umum">Umum</option>
-                      <option value="Keuangan">Keuangan</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="space-y-3 bg-slate-50/50 p-6 rounded-2xl border border-slate-100">
-                  <label className="text-[11px] font-black text-slate-500 uppercase flex items-center gap-2">
-                    <FileBox size={14} className="text-indigo-500" /> Kategori Dokumen
-                  </label>
-                  <div className="flex flex-wrap gap-3">
-                    <button type="button" onClick={() => setFormData({...formData, kategori: 'Nota Dinas'})} className={`flex-1 flex items-center justify-center gap-3 p-4 rounded-xl border-2 transition-all font-bold text-sm ${formData.kategori === 'Nota Dinas' ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-200 hover:text-indigo-500'}`}><FileText size={18} /> Nota Dinas</button>
-                    <button type="button" onClick={() => setFormData({...formData, kategori: 'Form'})} className={`flex-1 flex items-center justify-center gap-3 p-4 rounded-xl border-2 transition-all font-bold text-sm ${formData.kategori === 'Form' ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-200 hover:text-indigo-500'}`}><Files size={18} /> Form Pengajuan</button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Rincian Barang & Alasan</label>
-                  <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                    <table className="w-full text-left border-collapse">
-                      <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 border-b">
-                        <tr>
-                          <th className="p-4 w-10 text-center">No</th>
-                          <th className="p-4">Barang</th>
-                          <th className="p-4">Spek</th>
-                          <th className="p-4 w-20 text-center">Qty</th>
-                          <th className="p-4">Alasan</th>
-                          <th className="p-4 w-10"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
-                        {formData.items.map((item, idx) => (
-                          <tr key={idx} className="hover:bg-indigo-50/20 transition-colors">
-                            <td className="p-4 text-center text-xs font-bold text-slate-300">{idx + 1}</td>
-                            <td className="p-2">
-                              <input type="text" placeholder="Nama Barang" required className="w-full p-2 bg-transparent text-sm font-bold border-none focus:ring-0 outline-none" value={item.namaBarang} onChange={(e) => handleItemChange(idx, 'namaBarang', e.target.value)} />
-                            </td>
-                            <td className="p-2">
-                              <input type="text" placeholder="Merk/Detail" className="w-full p-2 bg-transparent text-sm border-none focus:ring-0 outline-none text-slate-500" value={item.spesifikasi} onChange={(e) => handleItemChange(idx, 'spesifikasi', e.target.value)} />
-                            </td>
-                            <td className="p-2">
-                              <input type="number" className="w-full p-2 bg-transparent text-sm font-black text-center border-none focus:ring-0 outline-none" value={item.jumlah} onChange={(e) => handleItemChange(idx, 'jumlah', parseInt(e.target.value) || 0)} />
-                            </td>
-                            <td className="p-2">
-                              <input type="text" placeholder="Sebab..." required className="w-full p-2 bg-transparent text-sm font-medium text-indigo-600 placeholder:text-slate-300 border-none focus:ring-0 outline-none italic" value={item.alasan} onChange={(e) => handleItemChange(idx, 'alasan', e.target.value)} />
-                            </td>
-                            <td className="p-2 text-center">
-                              <button type="button" disabled={formData.items.length <= 1} onClick={() => removeItem(idx)} className={`p-1.5 rounded-lg ${formData.items.length > 1 ? 'text-rose-300 hover:bg-rose-50 hover:text-rose-600' : 'text-slate-100 cursor-not-allowed'}`}><Minus size={16}/></button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div className="p-3 bg-slate-50 border-t border-slate-200">
-                      <button type="button" onClick={addItem} className="flex items-center gap-2 px-4 py-2 text-[10px] font-black text-indigo-600 bg-white border border-indigo-100 rounded-xl hover:bg-indigo-600 hover:text-white transition-all uppercase tracking-widest shadow-sm"><Plus size={14}/> Tambah Item</button>
-                    </div>
-                  </div>
-                </div>
-
-                <button type="submit" className={`w-full py-4 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg transition-all flex items-center justify-center gap-3 ${editingId ? 'bg-amber-500 shadow-amber-100 hover:bg-amber-600' : 'bg-indigo-600 shadow-indigo-100 hover:bg-indigo-700'}`}>
-                  {editingId ? <ArrowRight size={20}/> : <Cloud size={20}/>} {editingId ? 'Simpan Perubahan' : 'Kirim Pengajuan ke Cloud'}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {activeTab === 'database' && (
-            <div className="space-y-6 max-w-6xl mx-auto">
-              <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center">
-                <div className="relative w-full md:w-96">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
-                  <input type="text" placeholder="Cari pemohon, penerima, atau unit..." className="w-full pl-12 pr-4 py-3 border border-slate-100 rounded-xl bg-slate-50 text-sm outline-none font-bold" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-                </div>
-              </div>
-
-              <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead className="bg-slate-50/50 text-[10px] uppercase font-black text-slate-400 border-b tracking-widest">
-                      <tr>
-                        <th className="p-5">Pemohon & Penerima</th>
-                        <th className="p-5">Rincian & Foto</th>
-                        <th className="p-5 text-center">Status</th>
-                        <th className="p-5 text-right">Opsi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50 text-sm font-bold">
-                      {submissions.filter(s => 
-                        s.namaPemohon?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                        s.penerima?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        s.unit?.toLowerCase().includes(searchTerm.toLowerCase())
-                      ).map(s => (
-                        <tr key={s.id} className="hover:bg-slate-50/30 transition-colors">
-                          <td className="p-5">
-                            <div className="text-slate-800 flex items-center gap-2">
-                              {s.namaPemohon}
-                              <span className={`text-[8px] px-1.5 py-0.5 rounded border uppercase ${s.kategori === 'Form' ? 'text-amber-600 border-amber-200 bg-amber-50' : 'text-blue-600 border-blue-200 bg-blue-50'}`}>
-                                {s.kategori || 'Nota'}
-                              </span>
-                            </div>
-                            <div className="text-[11px] font-medium text-indigo-500 mt-1 uppercase tracking-tighter flex items-center gap-1">
-                               Penerima: <span className="text-slate-900 font-black">{s.penerima || '-'}</span>
-                            </div>
-                            <div className="text-[9px] text-slate-400 uppercase font-mono tracking-tighter mt-1">{s.unit} • {s.tanggal}</div>
-                          </td>
-                          <td className="p-5">
-                            <div className="space-y-1.5">
-                              {s.items?.map((it, i) => (
-                                <div key={i} className="flex flex-col border-l-2 border-indigo-100 pl-2 py-0.5">
-                                  <span className="text-xs text-slate-700">{it.namaBarang} ({it.jumlah})</span>
-                                </div>
-                              ))}
-                              {s.buktiFoto && (
-                                <button onClick={() => window.open(s.buktiFoto)} className="mt-2 flex items-center gap-1 text-[9px] text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100 hover:bg-emerald-100 transition-all uppercase font-black">
-                                  <Camera size={10}/> Lihat Bukti Foto
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-5">
-                            <div className="flex flex-col items-center gap-2">
-                              <span className={`text-[9px] w-24 font-black px-2 py-1 rounded-lg border text-center uppercase tracking-wider ${getStatusStyle(s.status)}`}>{s.status}</span>
-                              <div className="flex justify-center gap-1">
-                                 <button title="Proses" onClick={() => updateStatus(s.id, 'Proses')} className="p-1.5 text-orange-400 hover:bg-orange-50 rounded-md transition-colors"><RotateCcw size={14}/></button>
-                                 <button title="Pending" onClick={() => updateStatus(s.id, 'Pending')} className="p-1.5 text-amber-500 hover:bg-amber-50 rounded-md transition-colors"><Timer size={14}/></button>
-                                 <button title="Selesai" onClick={() => updateStatus(s.id, 'Selesai')} className="p-1.5 text-emerald-400 hover:bg-emerald-50 rounded-md transition-colors"><CheckCircle2 size={14}/></button>
-                                 <button title="Ditolak" onClick={() => updateStatus(s.id, 'Ditolak')} className="p-1.5 text-rose-400 hover:bg-rose-50 rounded-md transition-colors"><XCircle size={14}/></button>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="p-5 text-right">
-                            <div className="flex justify-end gap-1">
-                              <button onClick={() => startEdit(s)} className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-lg"><Edit3 size={16}/></button>
-                              <button onClick={async () => { if(window.confirm("Hapus data permanen?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pengajuan', s.id)) }} className="p-2 text-slate-300 hover:text-rose-500 rounded-lg"><Trash2 size={16}/></button>
-                            </div>
-                          </td>
-                        </tr>
+        <div className="bg-white border border-slate-200 rounded-2xl p-8 print:border-none font-serif report-content shadow-sm print:shadow-none">
+          <h1 className="text-center font-bold text-2xl uppercase mb-8 border-b-2 border-slate-100 pb-4 text-slate-800 tracking-wide">
+            Laporan Rekapitulasi Pengadaan Barang
+          </h1>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11px] text-left border-collapse border border-slate-200 font-sans">
+              <thead>
+                <tr className="bg-slate-50 text-slate-800 italic">
+                  <th className="p-4 border border-slate-200 font-bold uppercase tracking-tighter">Tanggal</th>
+                  <th className="p-4 border border-slate-200 font-bold uppercase tracking-tighter">Kode Dokumen</th>
+                  <th className="p-4 border border-slate-200 font-bold uppercase tracking-tighter">Pemohon / Unit</th>
+                  <th className="p-4 border border-slate-200 font-bold uppercase tracking-tighter">Item & Keperluan</th>
+                  <th className="p-4 border border-slate-200 text-center font-bold uppercase tracking-tighter">Jml</th>
+                  <th className="p-4 border border-slate-200 text-center font-bold uppercase tracking-tighter">Status</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white">
+                {data.map(s => (
+                  <tr key={s.id} className="border border-slate-100 hover:bg-slate-50/50 transition-colors">
+                    <td className="p-3 border border-slate-100 text-slate-600">{s.tanggal}</td>
+                    <td className="p-3 border border-slate-100 font-bold text-blue-900">{s.kodeUnik}</td>
+                    <td className="p-3 border border-slate-100">
+                      <div className="font-semibold text-slate-800">{s.pemohon}</div>
+                      <div className="text-[9px] text-slate-500 italic">{s.unitKerja}</div>
+                    </td>
+                    <td className="p-3 border border-slate-100">
+                      {s.items.map((it, i) => (
+                        <div key={i} className="mb-2 last:mb-0">
+                          <span className="font-medium text-slate-700">• {it.namaBarang}</span>
+                          <span className="text-slate-500 italic ml-1 block text-[10px] leading-tight">Keperluan: {it.alasan || '-'}</span>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                    </td>
+                    <td className="p-3 border border-slate-100 text-center font-bold text-slate-700">
+                      {s.items.reduce((a, b) => a + (Number(b.jumlah) || 0), 0)}
+                    </td>
+                    <td className="p-3 border border-slate-100 text-center">
+                      <span className={`px-2.5 py-1 rounded-md text-[9px] font-bold border uppercase inline-block shadow-sm ${getStatusColor(s.status)}`}>
+                        {s.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {data.length === 0 && (
+                  <tr>
+                    <td colSpan="6" className="p-10 text-center text-slate-400 italic font-sans">Belum ada data rekapan untuk periode ini.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-12 hidden print:grid grid-cols-2 text-[11px] font-sans">
+            <div className="text-center">
+              <p className="mb-24">Mengetahui,</p>
+              <p className="font-bold underline uppercase tracking-wider text-slate-900">Kepala Unit Kerja</p>
+              <p className="text-[9px] text-slate-400 mt-1">NIP. .......................................</p>
             </div>
-          )}
-
-          {activeTab === 'serah-terima' && (
-            <div className="max-w-2xl mx-auto space-y-6">
-              <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-                <div className="flex items-center gap-4 border-b border-slate-100 pb-6">
-                  <div className="bg-emerald-100 text-emerald-600 p-3 rounded-2xl"><PackageCheck size={28}/></div>
-                  <div>
-                    <h3 className="font-black text-xl uppercase tracking-tight leading-none mb-1">Verifikasi Serah Terima</h3>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Selesaikan pengajuan dengan bukti foto</p>
-                  </div>
-                </div>
-
-                <form onSubmit={handleSerahTerima} className="space-y-6">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Pilih ID Pengajuan (Status Proses)</label>
-                    <select 
-                      value={selectedSerahId}
-                      onChange={(e) => setSelectedSerahId(e.target.value)}
-                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-100"
-                      required
-                    >
-                      <option value="">-- Pilih Antrian Pengajuan --</option>
-                      {submissions
-                        .filter(p => p.status === 'Proses')
-                        .map(p => (
-                          <option key={p.id} value={p.id}>
-                            [{p.tanggal}] {p.namaPemohon} - {p.items?.[0]?.namaBarang} (Penerima: {p.penerima})
-                          </option>
-                        ))
-                      }
-                    </select>
-                  </div>
-
-                  {selectedSerahId && (
-                    <div className="p-5 bg-emerald-50/50 rounded-2xl border border-dashed border-emerald-200 animate-in fade-in zoom-in-95 duration-300">
-                      {(() => {
-                        const s = submissions.find(p => p.id === selectedSerahId);
-                        return (
-                          <div className="space-y-3">
-                            <div className="flex justify-between text-xs">
-                              <span className="text-slate-400 font-bold uppercase tracking-widest">Unit Kerja:</span>
-                              <span className="text-slate-800 font-black uppercase">{s.unit}</span>
-                            </div>
-                            <div className="flex justify-between text-xs">
-                              <span className="text-slate-400 font-bold uppercase tracking-widest">Penerima Barang:</span>
-                              <span className="text-emerald-700 font-black uppercase">{s.penerima}</span>
-                            </div>
-                            <div className="pt-2 border-t border-emerald-100">
-                              <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Daftar Item:</p>
-                              {s.items?.map((it, i) => (
-                                <div key={i} className="text-xs font-bold text-slate-700">• {it.namaBarang} ({it.jumlah} Unit)</div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Bukti Foto Penyerahan</label>
-                    <div 
-                      onClick={() => setPhotoProof(`https://picsum.photos/seed/${Math.random()}/600/400`)}
-                      className="relative h-56 border-4 border-dashed border-slate-100 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 hover:border-indigo-200 transition-all overflow-hidden group"
-                    >
-                      {photoProof ? (
-                        <>
-                          <img src={photoProof} alt="Bukti" className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-indigo-900/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <p className="text-white text-xs font-black uppercase tracking-widest">Klik untuk ambil ulang</p>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="bg-slate-100 p-4 rounded-full text-slate-300 mb-3 group-hover:text-indigo-400 group-hover:bg-indigo-50 transition-all"><Camera size={32} /></div>
-                          <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Klik Simulasi Ambil Foto</p>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  <button 
-                    disabled={isSubmittingSerah || !selectedSerahId || !photoProof}
-                    type="submit" 
-                    className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-3 shadow-lg ${
-                      isSubmittingSerah || !selectedSerahId || !photoProof ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-100'
-                    }`}
-                  >
-                    {isSubmittingSerah ? <Loader2 className="animate-spin" /> : <PackageCheck size={20} />}
-                    {isSubmittingSerah ? 'Menyimpan...' : 'Selesaikan & Verifikasi'}
-                  </button>
-                </form>
-              </div>
+            <div className="text-center">
+              <p className="mb-24 italic text-slate-700">Jakarta, {new Date().toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'})}</p>
+              <p className="font-bold underline uppercase tracking-wider text-slate-900">{user?.displayName || 'Petugas Administrasi'}</p>
+              <p className="text-[9px] text-slate-400 mt-1">Staf Administrasi Umum</p>
             </div>
-          )}
-
-          {activeTab === 'report' && (
-            <div className="space-y-6 max-w-6xl mx-auto">
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-lg"><BarChart3 size={24}/></div>
-                  <div>
-                    <h3 className="font-black text-xl text-slate-800 uppercase tracking-tight leading-none mb-1">Rekap Laporan</h3>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Laporan Bulanan Terintegrasi</p>
-                  </div>
-                </div>
-                
-                <div className="flex flex-wrap items-center gap-2">
-                  <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black uppercase outline-none focus:ring-2 focus:ring-indigo-100" value={reportCategory} onChange={(e) => setReportCategory(e.target.value)}>
-                    <option value="Semua">Semua Kategori</option>
-                    <option value="Nota Dinas">Nota Dinas</option>
-                    <option value="Form">Form Pengajuan</option>
-                  </select>
-                  <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black uppercase outline-none focus:ring-2 focus:ring-indigo-100" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)}>
-                    {["01","02","03","04","05","06","07","08","09","10","11","12"].map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                  <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black uppercase outline-none focus:ring-2 focus:ring-indigo-100" value={reportYear} onChange={(e) => setReportYear(e.target.value)}>
-                    {["2024","2025","2026"].map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                  <button onClick={downloadAsJpg} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all">
-                    <Download size={14}/> Download JPG
-                  </button>
-                </div>
-              </div>
-
-              {/* PRINTABLE AREA */}
-              <div ref={reportRef} className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm p-10">
-                 <div className="mb-10 border-b-8 border-slate-900 pb-8 flex justify-between items-end">
-                    <div>
-                      <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter leading-none mb-3">REKAPITULASI PENGADAAN & SERAH TERIMA</h1>
-                      <div className="flex gap-4">
-                        <p className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><FileBox size={14} className="text-indigo-500"/> {reportCategory}</p>
-                        <p className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5"><History size={14} className="text-indigo-500"/> Periode: {reportMonth}/{reportYear}</p>
-                      </div>
-                    </div>
-                    <div className="bg-slate-900 text-white p-4 rounded-2xl text-center min-w-[120px]">
-                      <p className="text-[10px] font-black uppercase tracking-widest mb-1 opacity-60">Total Data</p>
-                      <p className="text-3xl font-black">{filteredReports.length}</p>
-                    </div>
-                 </div>
-
-                 <div className="overflow-x-auto">
-                   <table className="w-full text-left text-xs border-collapse">
-                      <thead className="bg-slate-900 text-[10px] font-black uppercase text-white tracking-widest">
-                        <tr>
-                          <th className="p-4 w-12 text-center">No</th>
-                          <th className="p-4 w-32">Data Dokumen</th>
-                          <th className="p-4 w-40">Pemohon & Penerima</th>
-                          <th className="p-0">
-                            <table className="w-full text-[9px] uppercase tracking-widest font-black">
-                              <tbody>
-                                <tr className="border-none">
-                                  <th className="p-4 text-left border-r border-slate-800">Nama Barang</th>
-                                  <th className="p-4 text-center border-r border-slate-800 w-16">Qty</th>
-                                  <th className="p-4 text-left">Alasan Pengajuan</th>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </th>
-                          <th className="p-4 w-32 text-center">Status Akhir</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200">
-                        {filteredReports.length > 0 ? filteredReports.map((s, idx) => (
-                          <tr key={idx} className="align-top hover:bg-slate-50/50 transition-all font-bold">
-                            <td className="p-4 text-center text-xs text-slate-400 border-r border-slate-100">{idx + 1}</td>
-                            <td className="p-4 border-r border-slate-100">
-                              <span className="text-slate-900 block text-xs">{s.tanggal}</span>
-                              <span className={`text-[8px] px-1.5 py-0.5 rounded border inline-block mt-1 uppercase ${s.kategori === 'Form' ? 'text-amber-600 border-amber-200 bg-amber-50' : 'text-indigo-600 border-indigo-200 bg-indigo-50'}`}>
-                                {s.kategori}
-                              </span>
-                            </td>
-                            <td className="p-4 border-r border-slate-100">
-                              <div className="text-slate-900 text-xs leading-tight font-black uppercase">{s.namaPemohon}</div>
-                              <div className="text-[9px] text-slate-400 uppercase font-mono mt-1">{s.unit}</div>
-                              <div className="mt-2 pt-2 border-t border-slate-50">
-                                <span className="text-[8px] text-slate-400 uppercase font-black">Penerima:</span>
-                                <div className="text-[10px] text-indigo-600 font-black uppercase">{s.penerima || '-'}</div>
-                              </div>
-                            </td>
-                            <td className="p-0 border-r border-slate-100">
-                              <table className="w-full border-collapse">
-                                <tbody className="divide-y divide-slate-100">
-                                  {s.items?.map((it, i) => (
-                                    <tr key={i} className="text-[10px]">
-                                      <td className="p-4 border-r border-slate-100 font-bold text-slate-700">{it.namaBarang}</td>
-                                      <td className="p-4 border-r border-slate-100 w-16 text-center font-black text-indigo-600 bg-indigo-50/20">{it.jumlah}</td>
-                                      <td className="p-4 text-slate-400 italic font-medium leading-relaxed">{it.alasan}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </td>
-                            <td className="p-4 bg-slate-50/30 text-center">
-                               <span className={`text-[9px] font-black px-3 py-1.5 rounded-lg border uppercase tracking-widest inline-block w-full ${getStatusStyle(s.status)}`}>
-                                 {s.status}
-                               </span>
-                               {s.status === 'Selesai' && s.waktuSelesai && (
-                                 <p className="text-[8px] text-slate-400 mt-2 font-mono">Verified: {new Date(s.waktuSelesai).toLocaleDateString()}</p>
-                               )}
-                            </td>
-                          </tr>
-                        )) : (
-                          <tr>
-                            <td colSpan="5" className="p-24 text-center">
-                              <div className="flex flex-col items-center gap-4 opacity-20">
-                                <FileBox size={64}/>
-                                <p className="text-sm font-black uppercase tracking-widest">Laporan Kosong</p>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                   </table>
-                 </div>
-                 
-                 <div className="mt-16 flex justify-between items-end border-t-2 border-slate-100 pt-8">
-                   <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-300">
-                     E-Nota & Serah Terima Terintegrasi • Generated Cloud Data
-                   </div>
-                   <div className="text-right space-y-4">
-                      <div className="w-48 h-[1px] bg-slate-200"></div>
-                      <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest leading-none">Petugas Administrasi</p>
-                      <p className="text-[8px] font-bold text-slate-400 uppercase italic">Waktu Cetak: {new Date().toLocaleString('id-ID')}</p>
-                   </div>
-                 </div>
-              </div>
-            </div>
-          )}
+          </div>
         </div>
+      </div>
+    );
+  };
+
+  if (loading) return (
+    <div className="h-screen flex flex-col items-center justify-center font-sans bg-slate-50">
+      <div className="animate-spin text-blue-600 mb-4"><RotateCcw size={40}/></div>
+      <p className="text-slate-500 font-medium">Menghubungkan ke database Firebase...</p>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex font-sans">
+      <div className="w-64 bg-slate-900 text-white min-h-screen p-4 flex flex-col fixed left-0 top-0 print:hidden shadow-xl z-10">
+        <div className="flex items-center gap-3 mb-10 px-2">
+          <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-500/20"><FileText size={24} /></div>
+          <h1 className="font-bold text-xl tracking-tight">E-OFFICE</h1>
+        </div>
+        <nav className="flex-1 space-y-2">
+          <NavItem icon={<LayoutDashboard size={20}/>} label="Dashboard" id="dashboard" activeTab={activeTab} setActiveTab={setActiveTab} />
+          <NavItem icon={<Plus size={20}/>} label="Pengajuan" id="form" activeTab={activeTab} setActiveTab={setActiveTab} />
+          <NavItem icon={<Database size={20}/>} label="Database" id="database" activeTab={activeTab} setActiveTab={setActiveTab} />
+          <NavItem icon={<PackageCheck size={20}/>} label="Serah Terima" id="delivery" activeTab={activeTab} setActiveTab={setActiveTab} />
+          <NavItem icon={<FileBarChart size={20}/>} label="Laporan" id="report" activeTab={activeTab} setActiveTab={setActiveTab} />
+        </nav>
+        <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 mt-4">
+          <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Status Koneksi</p>
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${user ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-red-500 animate-pulse'}`}></div>
+            <span className="text-xs text-slate-300">{user ? 'Terhubung (Cloud)' : 'Menghubungkan...'}</span>
+          </div>
+        </div>
+      </div>
+      <main className="ml-64 flex-1 p-8 print:ml-0 print:p-0 min-h-screen">
+        {activeTab === 'dashboard' && renderDashboard()}
+        {activeTab === 'form' && renderForm()}
+        {activeTab === 'database' && renderDatabase()}
+        {activeTab === 'delivery' && renderDelivery()}
+        {activeTab === 'report' && renderReport()}
       </main>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        .font-sans { font-family: 'Inter', sans-serif; }
+        .font-serif { font-family: 'Playfair Display', serif; }
+
+        .report-content table {
+          border-spacing: 0;
+          border-collapse: collapse;
+        }
+
+        @media print { 
+          @page { size: landscape; margin: 1cm; } 
+          .print\\:hidden { display: none !important; } 
+          body { background: white; color: black; }
+          main { padding: 0 !important; margin-left: 0 !important; }
+          .bg-white { background-color: white !important; }
+          .shadow-sm { box-shadow: none !important; }
+        }
+      `}</style>
     </div>
   );
 };
 
 export default App;
-
-```
