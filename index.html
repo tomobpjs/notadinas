@@ -7,8 +7,8 @@ import {
   addDoc, 
   onSnapshot, 
   updateDoc, 
+  deleteDoc,
   doc, 
-  query, 
   serverTimestamp 
 } from 'firebase/firestore';
 import { 
@@ -19,35 +19,30 @@ import {
   FileBarChart, 
   Plus, 
   Trash2, 
-  Save, 
-  Search,
-  Download,
-  Camera,
+  Edit3,
+  X,
+  AlertTriangle,
+  RotateCcw,
   CheckCircle2,
   Clock,
   XCircle,
-  RotateCcw,
   AlertCircle,
-  Edit3,
-  X
+  Camera,
+  Download,
+  ChevronRight,
+  Check,
+  Calendar,
+  Image as ImageIcon
 } from 'lucide-react';
 
-// --- Firebase Configuration ---
-const firebaseConfig = {
-  apiKey: "AIzaSyAOAMNE1yBVB09dbO-4Rr-D7KPODU0-694",
-  authDomain: "notadinasrt.firebaseapp.com",
-  projectId: "notadinasrt",
-  storageBucket: "notadinasrt.firebasestorage.app",
-  messagingSenderId: "96523383307",
-  appId: "1:96523383307:web:9a0bc43bd7f6375e050d0e"
-};
-
+// --- Konfigurasi Firebase ---
+const firebaseConfig = JSON.parse(__firebase_config);
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'nota-dinas-app';
 
-// --- Sub-Components ---
+// --- Komponen Pendukung ---
 const NavItem = ({ icon, label, id, activeTab, setActiveTab }) => (
   <button
     onClick={() => setActiveTab(id)}
@@ -85,17 +80,20 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState(null);
+  const [deleteId, setDeleteId] = useState(null);
+  const reportRef = useRef(null);
+  
+  // State khusus Serah Terima
+  const [selectedDelivery, setSelectedDelivery] = useState(null);
 
-  // Form State
   const [formData, setFormData] = useState({
     kategori: 'Nota Dinas',
     tanggal: new Date().toISOString().split('T')[0],
     pemohon: '',
     unitKerja: '',
-    items: [{ id: Date.now(), namaBarang: '', spesifikasi: '', jumlah: '', alasan: '' }]
+    items: [{ id: Date.now(), namaBarang: '', spesifikasi: '', jumlah: '', alasan: '', fotoUrl: null }]
   });
 
-  // Filter State
   const [filter, setFilter] = useState({
     bulan: new Date().getMonth() + 1,
     tahun: new Date().getFullYear(),
@@ -105,20 +103,13 @@ const App = () => {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Mencoba masuk dengan custom token lingkungan jika ada
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          try {
-            await signInWithCustomToken(auth, __initial_auth_token);
-          } catch (tokenError) {
-            // Jika token mismatch (biasanya karena pindah project), gunakan fallback Anonymous
-            console.warn("Custom token mismatch, falling back to Anonymous auth.");
-            await signInAnonymously(auth);
-          }
+          await signInWithCustomToken(auth, __initial_auth_token);
         } else {
           await signInAnonymously(auth);
         }
-      } catch (error) {
-        console.error("Auth error detail:", error);
+      } catch (err) {
+        console.error("Auth error:", err);
       }
     };
     initAuth();
@@ -139,7 +130,6 @@ const App = () => {
     return () => unsubscribe();
   }, [user]);
 
-  // Logic Handlers
   const handleItemChange = (index, field, value, isEdit = false) => {
     if (isEdit) {
       setEditingDoc(prev => {
@@ -157,7 +147,7 @@ const App = () => {
   };
 
   const addItem = (isEdit = false) => {
-    const newItem = { id: Date.now(), namaBarang: '', spesifikasi: '', jumlah: '', alasan: '' };
+    const newItem = { id: Date.now(), namaBarang: '', spesifikasi: '', jumlah: '', alasan: '', fotoUrl: null };
     if (isEdit) setEditingDoc(p => ({ ...p, items: [...p.items, newItem] }));
     else setFormData(p => ({ ...p, items: [...p.items, newItem] }));
   };
@@ -171,28 +161,96 @@ const App = () => {
     e.preventDefault();
     if (!user) return;
     const kode = `${formData.kategori === 'Nota Dinas' ? 'ND' : 'FORM'}-${formData.tanggal.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
-    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'submissions'), {
-      ...formData,
-      kodeUnik: kode,
-      status: 'Pending',
-      createdAt: serverTimestamp()
-    });
-    setFormData({ kategori: 'Nota Dinas', tanggal: new Date().toISOString().split('T')[0], pemohon: '', unitKerja: '', items: [{ id: Date.now(), namaBarang: '', spesifikasi: '', jumlah: '', alasan: '' }] });
-    setActiveTab('database');
+    
+    try {
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'submissions'), {
+        ...formData,
+        kodeUnik: kode,
+        status: 'Pending',
+        createdAt: serverTimestamp()
+      });
+      setFormData({ 
+        kategori: 'Nota Dinas', 
+        tanggal: new Date().toISOString().split('T')[0], 
+        pemohon: '', 
+        unitKerja: '', 
+        items: [{ id: Date.now(), namaBarang: '', spesifikasi: '', jumlah: '', alasan: '', fotoUrl: null }] 
+      });
+      setActiveTab('database');
+    } catch (err) {
+      console.error("Submit error:", err);
+    }
   };
 
   const handleUpdate = async (e) => {
     e.preventDefault();
     if (!user) return;
     const { id, createdAt, ...updateData } = editingDoc;
-    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', id), updateData);
-    setIsEditModalOpen(false);
+    try {
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', id), updateData);
+      setIsEditModalOpen(false);
+    } catch (err) {
+      console.error("Update error:", err);
+    }
   };
 
-  // Views
+  const handleDelete = async () => {
+    if (!user || !deleteId) return;
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', deleteId));
+      setDeleteId(null);
+    } catch (err) {
+      console.error("Delete error:", err);
+    }
+  };
+
+  const handleUploadFotoItem = async (submissionId, itemIndex) => {
+    const mockPhotoUrl = `https://picsum.photos/seed/${Math.random()}/400/300`;
+    const submission = submissions.find(s => s.id === submissionId);
+    if (!submission) return;
+    const updatedItems = [...submission.items];
+    updatedItems[itemIndex] = { ...updatedItems[itemIndex], fotoUrl: mockPhotoUrl };
+    try {
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', submissionId), {
+        items: updatedItems
+      });
+    } catch (err) {
+      console.error("Gagal update foto item:", err);
+    }
+  };
+
+  // Fungsi untuk mengunduh tabel sebagai Gambar menggunakan html2canvas (via CDN script)
+  const downloadAsImage = () => {
+    if (!reportRef.current) return;
+    
+    // Kita panggil script html2canvas secara dinamis jika belum ada
+    const runCapture = () => {
+      window.html2canvas(reportRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2, // Kualitas lebih tinggi
+        logging: false,
+        useCORS: true
+      }).then(canvas => {
+        const link = document.createElement('a');
+        link.download = `Laporan-NotaDinas-${filter.bulan}-${filter.tahun}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      });
+    };
+
+    if (!window.html2canvas) {
+      const script = document.createElement('script');
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+      script.onload = runCapture;
+      document.head.appendChild(script);
+    } else {
+      runCapture();
+    }
+  };
+
   const renderDashboard = () => (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-slate-800">Dashboard Utama</h2>
+      <h2 className="text-2xl font-bold text-slate-800">Ringkasan Operasional</h2>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <StatCard label="Total" count={submissions.length} color="blue" icon={<Database size={20}/>} />
         <StatCard label="Pending" count={submissions.filter(s => s.status === 'Pending').length} color="yellow" icon={<Clock size={20}/>} />
@@ -206,62 +264,60 @@ const App = () => {
 
   const renderForm = () => (
     <div className="max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold mb-6 text-slate-800">Pengajuan Baru</h2>
+      <h2 className="text-2xl font-bold mb-6 text-slate-800">Buat Pengajuan Baru</h2>
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-2 gap-4">
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-500 uppercase">Kategori</label>
-            <select className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.kategori} onChange={e => setFormData({...formData, kategori: e.target.value})}>
+            <select className="w-full p-2 border border-slate-200 rounded-lg outline-none" value={formData.kategori} onChange={e => setFormData({...formData, kategori: e.target.value})}>
               <option>Nota Dinas</option><option>Formulir</option>
             </select>
           </div>
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-500 uppercase">Tanggal</label>
-            <input type="date" className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.tanggal} onChange={e => setFormData({...formData, tanggal: e.target.value})} />
+            <input type="date" className="w-full p-2 border border-slate-200 rounded-lg outline-none" value={formData.tanggal} onChange={e => setFormData({...formData, tanggal: e.target.value})} />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-500 uppercase">Pemohon</label>
-            <input type="text" className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.pemohon} onChange={e => setFormData({...formData, pemohon: e.target.value})} />
+            <input type="text" className="w-full p-2 border border-slate-200 rounded-lg outline-none" placeholder="Nama Lengkap" value={formData.pemohon} onChange={e => setFormData({...formData, pemohon: e.target.value})} />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-500 uppercase">Unit Kerja</label>
-            <input type="text" className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.unitKerja} onChange={e => setFormData({...formData, unitKerja: e.target.value})} />
+            <input type="text" className="w-full p-2 border border-slate-200 rounded-lg outline-none" placeholder="Divisi/Bagian" value={formData.unitKerja} onChange={e => setFormData({...formData, unitKerja: e.target.value})} />
           </div>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="font-bold text-slate-700">Rincian Barang</h3>
+            <h3 className="font-bold text-slate-700">Rincian Barang & Keperluan</h3>
             <button type="button" onClick={() => addItem(false)} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-100">+ Tambah Baris</button>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-slate-500">
-                <tr>
-                  <th className="p-3 text-left">Nama Barang</th>
-                  <th className="p-3 text-left">Spesifikasi</th>
-                  <th className="p-3 text-center w-20">Jumlah</th>
-                  <th className="p-3 text-left">Alasan Pengajuan</th>
-                  <th className="p-3 w-10"></th>
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-500">
+              <tr>
+                <th className="p-3 text-left">Nama Barang</th>
+                <th className="p-3 text-left">Spesifikasi</th>
+                <th className="p-3 text-center w-20">Jumlah</th>
+                <th className="p-3 text-left">Alasan</th>
+                <th className="p-3 w-10"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {formData.items.map((item, idx) => (
+                <tr key={item.id}>
+                  <td className="p-2"><input type="text" className="w-full outline-none border-b border-transparent focus:border-blue-400" placeholder="..." value={item.namaBarang} onChange={e => handleItemChange(idx, 'namaBarang', e.target.value)} /></td>
+                  <td className="p-2"><input type="text" className="w-full outline-none border-b border-transparent focus:border-blue-400" placeholder="..." value={item.spesifikasi} onChange={e => handleItemChange(idx, 'spesifikasi', e.target.value)} /></td>
+                  <td className="p-2"><input type="number" className="w-full outline-none text-center border-b border-transparent focus:border-blue-400" value={item.jumlah} onChange={e => handleItemChange(idx, 'jumlah', e.target.value)} /></td>
+                  <td className="p-2"><input type="text" className="w-full outline-none border-b border-transparent focus:border-blue-400" placeholder="..." value={item.alasan} onChange={e => handleItemChange(idx, 'alasan', e.target.value)} /></td>
+                  <td className="p-2 text-center"><button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button></td>
                 </tr>
-              </thead>
-              <tbody className="divide-y">
-                {formData.items.map((item, idx) => (
-                  <tr key={item.id}>
-                    <td className="p-2"><input type="text" className="w-full outline-none bg-transparent border-b border-transparent focus:border-blue-400" placeholder="..." value={item.namaBarang} onChange={e => handleItemChange(idx, 'namaBarang', e.target.value)} /></td>
-                    <td className="p-2"><input type="text" className="w-full outline-none bg-transparent border-b border-transparent focus:border-blue-400" placeholder="..." value={item.spesifikasi} onChange={e => handleItemChange(idx, 'spesifikasi', e.target.value)} /></td>
-                    <td className="p-2"><input type="number" className="w-full outline-none bg-transparent text-center border-b border-transparent focus:border-blue-400" value={item.jumlah} onChange={e => handleItemChange(idx, 'jumlah', e.target.value)} /></td>
-                    <td className="p-2"><input type="text" className="w-full outline-none bg-transparent border-b border-transparent focus:border-blue-400" placeholder="..." value={item.alasan} onChange={e => handleItemChange(idx, 'alasan', e.target.value)} /></td>
-                    <td className="p-2 text-center"><button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 transition-colors"><Trash2 size={16}/></button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
         <div className="flex justify-end gap-3">
-          <button type="button" onClick={() => setActiveTab('dashboard')} className="px-6 py-2 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition-all">Batal</button>
-          <button type="submit" className="px-8 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all">Kirim Pengajuan</button>
+          <button type="button" onClick={() => setActiveTab('dashboard')} className="px-6 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100">Batal</button>
+          <button type="submit" className="px-8 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200">Kirim Pengajuan</button>
         </div>
       </form>
     </div>
@@ -269,14 +325,16 @@ const App = () => {
 
   const renderDatabase = () => (
     <div className="space-y-4">
-      <h2 className="text-2xl font-bold text-slate-800">Database Pengajuan</h2>
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-slate-800">Arsip Pengajuan</h2>
+      </div>
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 text-slate-500 border-b">
             <tr>
               <th className="px-6 py-4">Kode</th>
               <th className="px-6 py-4">Pemohon</th>
-              <th className="px-6 py-4">Rincian & Alasan</th>
+              <th className="px-6 py-4">Barang</th>
               <th className="px-6 py-4">Status</th>
               <th className="px-6 py-4">Aksi</th>
             </tr>
@@ -286,28 +344,27 @@ const App = () => {
               <tr key={s.id} className="hover:bg-slate-50/50">
                 <td className="px-6 py-4 font-bold text-slate-700">{s.kodeUnik}</td>
                 <td className="px-6 py-4">
-                  <div className="font-semibold text-slate-800">{s.pemohon}</div>
+                  <div className="font-semibold">{s.pemohon}</div>
                   <div className="text-xs text-slate-400">{s.unitKerja}</div>
                 </td>
                 <td className="px-6 py-4">
                   {s.items.map((it, i) => (
-                    <div key={i} className="mb-1">
-                      <span className="font-medium text-slate-700">• {it.namaBarang}</span>
-                      <span className="text-xs text-slate-500 block ml-3 italic">Alasan: {it.alasan || '-'}</span>
-                    </div>
+                    <div key={i} className="text-xs text-slate-600">• {it.namaBarang} ({it.jumlah})</div>
                   ))}
                 </td>
                 <td className="px-6 py-4">
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border uppercase ${
                     s.status === 'Pending' ? 'bg-yellow-50 text-yellow-600 border-yellow-100' :
                     s.status === 'Proses' ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                    s.status === 'Selesai' ? 'bg-green-50 text-green-600 border-green-100' : 'bg-red-50 text-red-600 border-red-100'
+                    s.status === 'Selesai' ? 'bg-green-50 text-green-600 border-green-100' :
+                    s.status === 'Cancel' ? 'bg-slate-50 text-slate-600 border-slate-100' : 'bg-red-50 text-red-600 border-red-100'
                   }`}>{s.status}</span>
                 </td>
                 <td className="px-6 py-4">
-                  <div className="flex gap-2">
-                    <button onClick={() => { setEditingDoc(s); setIsEditModalOpen(true); }} className="p-1.5 text-slate-400 hover:text-blue-600"><Edit3 size={16}/></button>
-                    <select className="text-[10px] p-1 border rounded bg-white text-slate-600 focus:ring-1 focus:ring-blue-400 outline-none" value={s.status} onChange={async (e) => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', s.id), { status: e.target.value })}>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => { setEditingDoc(s); setIsEditModalOpen(true); }} className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors" title="Edit"><Edit3 size={16}/></button>
+                    <button onClick={() => setDeleteId(s.id)} className="p-1.5 text-slate-400 hover:text-red-600 transition-colors" title="Hapus"><Trash2 size={16}/></button>
+                    <select className="text-[10px] p-1 border rounded bg-white" value={s.status} onChange={async (e) => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', s.id), { status: e.target.value })}>
                       <option value="Pending">Pending</option><option value="Proses">Proses</option><option value="Selesai">Selesai</option><option value="Ditolak">Ditolak</option><option value="Cancel">Cancel</option>
                     </select>
                   </div>
@@ -318,40 +375,53 @@ const App = () => {
         </table>
       </div>
 
+      {deleteId && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-sm rounded-2xl p-6 text-center shadow-2xl">
+            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle size={32} />
+            </div>
+            <h3 className="text-lg font-bold text-slate-800 mb-1">Hapus Pengajuan?</h3>
+            <p className="text-sm text-slate-500 mb-6">Tindakan ini tidak dapat dibatalkan.</p>
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteId(null)} className="flex-1 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-50">Batal</button>
+              <button onClick={handleDelete} className="flex-1 py-2 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700">Hapus</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isEditModalOpen && editingDoc && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center"><h3 className="font-bold text-slate-800">Edit Pengajuan</h3><button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button></div>
+            <div className="p-4 border-b flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-slate-800">Edit Data Pengajuan: {editingDoc.kodeUnik}</h3>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+            </div>
             <div className="p-6 overflow-y-auto space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Pemohon</label>
-                  <input className="w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-blue-500" value={editingDoc.pemohon} onChange={e => setEditingDoc({...editingDoc, pemohon: e.target.value})} placeholder="Pemohon" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Unit Kerja</label>
-                  <input className="w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-blue-500" value={editingDoc.unitKerja} onChange={e => setEditingDoc({...editingDoc, unitKerja: e.target.value})} placeholder="Unit Kerja" />
-                </div>
+                <input className="p-2 border rounded-lg outline-none focus:ring-1 focus:ring-blue-500" value={editingDoc.pemohon} onChange={e => setEditingDoc({...editingDoc, pemohon: e.target.value})} placeholder="Pemohon" />
+                <input className="p-2 border rounded-lg outline-none focus:ring-1 focus:ring-blue-500" value={editingDoc.unitKerja} onChange={e => setEditingDoc({...editingDoc, unitKerja: e.target.value})} placeholder="Unit Kerja" />
               </div>
               <table className="w-full text-sm">
-                <thead><tr className="text-slate-400 text-xs text-left"><th>Nama</th><th>Spek</th><th className="w-16 text-center">Jml</th><th>Alasan</th><th className="w-8"></th></tr></thead>
-                <tbody className="divide-y divide-slate-100">
+                <thead><tr className="text-slate-400 text-xs text-left"><th>Nama Barang</th><th>Spesifikasi</th><th className="w-16 text-center">Jml</th><th>Alasan</th><th className="w-8"></th></tr></thead>
+                <tbody className="divide-y">
                   {editingDoc.items.map((item, idx) => (
                     <tr key={item.id}>
-                      <td className="p-1"><input className="w-full py-2 border-b border-transparent focus:border-blue-400 outline-none" value={item.namaBarang} onChange={e => handleItemChange(idx, 'namaBarang', e.target.value, true)} /></td>
-                      <td className="p-1"><input className="w-full py-2 border-b border-transparent focus:border-blue-400 outline-none" value={item.spesifikasi} onChange={e => handleItemChange(idx, 'spesifikasi', e.target.value, true)} /></td>
-                      <td className="p-1"><input className="w-full py-2 border-b border-transparent focus:border-blue-400 outline-none text-center" value={item.jumlah} onChange={e => handleItemChange(idx, 'jumlah', e.target.value, true)} /></td>
-                      <td className="p-1"><input className="w-full py-2 border-b border-transparent focus:border-blue-400 outline-none" value={item.alasan} onChange={e => handleItemChange(idx, 'alasan', e.target.value, true)} /></td>
-                      <td className="p-1 text-center"><button onClick={() => removeItem(idx, true)} className="text-red-400 hover:text-red-600" disabled={editingDoc.items.length === 1}><Trash2 size={14}/></button></td>
+                      <td><input className="w-full py-2 outline-none border-b border-transparent focus:border-blue-400" value={item.namaBarang} onChange={e => handleItemChange(idx, 'namaBarang', e.target.value, true)} /></td>
+                      <td><input className="w-full py-2 outline-none border-b border-transparent focus:border-blue-400" value={item.spesifikasi} onChange={e => handleItemChange(idx, 'spesifikasi', e.target.value, true)} /></td>
+                      <td><input className="w-full py-2 outline-none border-b border-transparent focus:border-blue-400 text-center" value={item.jumlah} onChange={e => handleItemChange(idx, 'jumlah', e.target.value, true)} /></td>
+                      <td><input className="w-full py-2 outline-none border-b border-transparent focus:border-blue-400" value={item.alasan} onChange={e => handleItemChange(idx, 'alasan', e.target.value, true)} /></td>
+                      <td className="text-center"><button onClick={() => removeItem(idx, true)} className="text-red-400 hover:text-red-600" disabled={editingDoc.items.length === 1}><Trash2 size={14}/></button></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <button onClick={() => addItem(true)} className="text-xs text-blue-600 font-bold hover:underline">+ Tambah Baris</button>
+              <button onClick={() => addItem(true)} className="text-xs text-blue-600 font-bold hover:underline">+ Tambah Barang</button>
             </div>
-            <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
-              <button onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-white">Batal</button>
-              <button onClick={handleUpdate} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-all">Simpan Perubahan</button>
+            <div className="p-4 border-t flex justify-end gap-2 bg-slate-50">
+              <button onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 border rounded-lg font-bold text-slate-600">Batal</button>
+              <button onClick={handleUpdate} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold">Simpan Perubahan</button>
             </div>
           </div>
         </div>
@@ -359,125 +429,238 @@ const App = () => {
     </div>
   );
 
-  const renderDelivery = () => (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      <div className="space-y-4">
-        <h3 className="font-bold flex items-center gap-2 text-slate-800"><PackageCheck size={18} className="text-blue-600"/> Rekap Siap Serah Terima</h3>
-        <div className="space-y-3">
-          {submissions.filter(s => s.status === 'Pending' || s.status === 'Proses').map(s => (
-            <div key={s.id} className="p-4 bg-white border border-slate-200 rounded-xl hover:border-blue-500 cursor-pointer transition-all shadow-sm">
-              <div className="flex justify-between font-bold text-blue-600 mb-1"><span>{s.kodeUnik}</span><span className="text-[10px] uppercase text-slate-400">{s.status}</span></div>
-              <p className="text-sm font-semibold text-slate-700">{s.pemohon} - {s.unitKerja}</p>
-              <div className="mt-2 flex flex-wrap gap-1">
-                {s.items.map((it, i) => <span key={i} className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded uppercase font-bold border border-slate-200">{it.namaBarang}</span>)}
+  const renderDelivery = () => {
+    const currentDelivery = submissions.find(s => s.id === selectedDelivery);
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-5 space-y-4">
+          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+            <PackageCheck size={24} className="text-blue-600"/> Arsip Serah Terima
+          </h2>
+          <div className="space-y-3 max-h-[75vh] overflow-y-auto pr-2">
+            {submissions.map(s => (
+              <div 
+                key={s.id} 
+                onClick={() => setSelectedDelivery(s.id)}
+                className={`p-4 bg-white border rounded-2xl cursor-pointer transition-all hover:border-blue-300 shadow-sm relative overflow-hidden ${
+                  selectedDelivery === s.id ? 'border-blue-500 ring-2 ring-blue-50/50' : 'border-slate-200'
+                }`}
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-wider">{s.kodeUnik}</span>
+                    <h4 className="font-bold text-slate-800 mt-1">{s.pemohon}</h4>
+                    <p className="text-xs text-slate-500">{s.unitKerja}</p>
+                  </div>
+                  <span className={`text-[9px] px-2 py-0.5 rounded border font-bold uppercase ${
+                    s.status === 'Selesai' ? 'bg-green-50 text-green-600 border-green-100' : 
+                    s.status === 'Pending' ? 'bg-yellow-50 text-yellow-600 border-yellow-100' :
+                    s.status === 'Proses' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-slate-50 text-slate-400 border-slate-100'
+                  }`}>{s.status}</span>
+                </div>
+                <div className="flex justify-between items-center text-[11px] text-slate-400 mt-3 pt-3 border-t">
+                   <span>{s.items.length} Barang</span>
+                   <ChevronRight size={14} className={selectedDelivery === s.id ? 'text-blue-500' : 'text-slate-300'} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="lg:col-span-7">
+          {currentDelivery ? (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full min-h-[500px]">
+              <div className="p-6 bg-slate-50 border-b flex justify-between items-center">
+                <div>
+                  <h3 className="font-bold text-slate-800">Detail Serah Terima</h3>
+                  <p className="text-xs text-slate-500 font-medium">{currentDelivery.kodeUnik} — {currentDelivery.pemohon}</p>
+                </div>
+                <button 
+                  onClick={async () => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', currentDelivery.id), { status: 'Selesai' })}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl text-xs font-bold hover:bg-green-700 transition-colors shadow-lg shadow-green-100"
+                >
+                  <Check size={16}/> Selesai Semua
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6 overflow-y-auto">
+                <div className="grid grid-cols-1 gap-4">
+                  {currentDelivery.items.map((item, idx) => (
+                    <div key={idx} className="flex gap-4 p-4 border rounded-xl bg-white hover:bg-slate-50 transition-colors group">
+                      <div 
+                        onClick={() => handleUploadFotoItem(currentDelivery.id, idx)}
+                        className="w-24 h-24 bg-slate-100 rounded-lg flex-shrink-0 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 relative overflow-hidden group-hover:border-blue-200 cursor-pointer"
+                      >
+                        {item.fotoUrl ? (
+                          <>
+                            <img src={item.fotoUrl} alt="Bukti" className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                               <Camera size={16} className="text-white"/>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-center text-slate-300 group-hover:text-blue-400">
+                            <Camera size={20} className="mb-1" />
+                            <span className="text-[8px] font-bold uppercase">Upload</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 flex flex-col justify-between">
+                        <div>
+                          <div className="flex justify-between items-start">
+                            <h5 className="font-bold text-slate-700 leading-tight">{item.namaBarang}</h5>
+                            <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold">Qty: {item.jumlah}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-1 italic">{item.spesifikasi || 'Tanpa spesifikasi'}</p>
+                        </div>
+                        <div className="flex items-center gap-2 mt-2">
+                          {item.fotoUrl ? (
+                            <span className="text-[10px] text-green-600 font-bold flex items-center gap-1">
+                              <CheckCircle2 size={12}/> Foto Terupload
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-medium">Foto belum tersedia</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-          ))}
-          {submissions.filter(s => s.status === 'Pending' || s.status === 'Proses').length === 0 && (
-            <div className="p-10 text-center text-slate-400 bg-white border border-dashed rounded-xl italic">Tidak ada item yang perlu diserahterimakan saat ini.</div>
+          ) : (
+            <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl h-full min-h-[500px] flex flex-col items-center justify-center text-slate-400 p-8 text-center">
+               <PackageCheck size={48} className="mb-4 opacity-20"/>
+               <p className="font-medium">Pilih salah satu pengajuan di samping untuk mengelola serah terima barang.</p>
+            </div>
           )}
         </div>
       </div>
-      <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm h-fit space-y-6">
-        <h3 className="font-bold text-slate-800">Konfirmasi Penerimaan</h3>
-        <div className="aspect-video bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-slate-400 group cursor-pointer hover:bg-slate-100 hover:border-blue-300 transition-all">
-          <Camera size={40} className="mb-2 group-hover:text-blue-500 transition-colors"/>
-          <p className="text-xs">Klik untuk upload bukti serah terima</p>
-          <span className="text-[10px] mt-1 opacity-60">(Opsional)</span>
-        </div>
-        <button className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">Konfirmasi Selesai</button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderReport = () => {
     const data = submissions.filter(s => {
       const d = new Date(s.tanggal);
-      return (d.getMonth()+1 === parseInt(filter.bulan)) && (d.getFullYear() === parseInt(filter.tahun)) && (filter.kategori === 'Semua' || s.kategori === filter.kategori);
+      return (d.getMonth()+1 === parseInt(filter.bulan)) && (d.getFullYear() === parseInt(filter.tahun));
     });
 
-    const getStatusColor = (status) => {
-      switch(status) {
-        case 'Pending': return 'bg-yellow-50 text-yellow-700 border-yellow-200';
-        case 'Proses': return 'bg-blue-50 text-blue-700 border-blue-200';
-        case 'Selesai': return 'bg-green-50 text-green-700 border-green-200';
-        case 'Ditolak': 
-        case 'Cancel': return 'bg-red-50 text-red-700 border-red-200';
-        default: return 'bg-slate-50 text-slate-700 border-slate-200';
+    const getStatusStyle = (status) => {
+      switch (status) {
+        case 'Pending': return 'bg-yellow-50 text-yellow-600 border-yellow-100';
+        case 'Proses': return 'bg-indigo-50 text-indigo-600 border-indigo-100';
+        case 'Selesai': return 'bg-green-50 text-green-600 border-green-100';
+        case 'Ditolak': return 'bg-red-50 text-red-600 border-red-100';
+        case 'Cancel': return 'bg-slate-50 text-slate-600 border-slate-100';
+        default: return 'bg-slate-50 text-slate-400 border-slate-100';
       }
     };
 
     return (
       <div className="space-y-6">
         <header className="flex justify-between items-center print:hidden">
-          <h2 className="text-2xl font-bold text-slate-800">Laporan Bulanan</h2>
-          <div className="flex gap-2">
-            <select className="p-2 border border-slate-200 rounded-lg text-sm bg-white" value={filter.kategori} onChange={e => setFilter({...filter, kategori: e.target.value})}><option value="Semua">Semua Kategori</option><option value="Nota Dinas">Nota Dinas</option><option value="Formulir">Formulir</option></select>
-            <select className="p-2 border border-slate-200 rounded-lg text-sm bg-white" value={filter.bulan} onChange={e => setFilter({...filter, bulan: e.target.value})}>{[...Array(12)].map((_, i) => <option key={i+1} value={i+1}>{new Date(0, i).toLocaleString('id', {month: 'long'})}</option>)}</select>
-            <button onClick={() => window.print()} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all"><Download size={16}/> Cetak Rekapan</button>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">Laporan Bulanan</h2>
+            <p className="text-sm text-slate-500">Rekapitulasi data pengajuan barang per periode.</p>
+          </div>
+          <div className="flex gap-3">
+            <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl">
+              <Calendar size={18} className="text-slate-400"/>
+              <select className="bg-transparent text-sm font-semibold outline-none text-slate-700" value={filter.bulan} onChange={e => setFilter({...filter, bulan: e.target.value})}>
+                {[...Array(12)].map((_, i) => <option key={i+1} value={i+1}>{new Date(0, i).toLocaleString('id', {month: 'long'})}</option>)}
+              </select>
+              <select className="bg-transparent text-sm font-semibold outline-none text-slate-700 border-l pl-2 ml-1" value={filter.tahun} onChange={e => setFilter({...filter, tahun: e.target.value})}>
+                {[2023, 2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+            
+            <div className="flex items-center gap-2">
+               <button onClick={downloadAsImage} className="px-5 py-2.5 bg-blue-50 text-blue-600 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-blue-100 transition-all border border-blue-100">
+                <ImageIcon size={16}/> Simpan Gambar
+              </button>
+              <button onClick={() => window.print()} className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg shadow-slate-200">
+                <Download size={16}/> Cetak PDF
+              </button>
+            </div>
           </div>
         </header>
-        <div className="bg-white border border-slate-200 rounded-2xl p-8 print:border-none font-serif report-content shadow-sm print:shadow-none">
-          <h1 className="text-center font-bold text-2xl uppercase mb-8 border-b-2 border-slate-100 pb-4 text-slate-800 tracking-wide">
-            Laporan Rekapitulasi Pengadaan Barang
-          </h1>
-          <div className="overflow-x-auto">
-            <table className="w-full text-[11px] text-left border-collapse border border-slate-200 font-sans">
-              <thead>
-                <tr className="bg-slate-50 text-slate-800 italic">
-                  <th className="p-4 border border-slate-200 font-bold uppercase tracking-tighter">Tanggal</th>
-                  <th className="p-4 border border-slate-200 font-bold uppercase tracking-tighter">Kode Dokumen</th>
-                  <th className="p-4 border border-slate-200 font-bold uppercase tracking-tighter">Pemohon / Unit</th>
-                  <th className="p-4 border border-slate-200 font-bold uppercase tracking-tighter">Item & Keperluan</th>
-                  <th className="p-4 border border-slate-200 text-center font-bold uppercase tracking-tighter">Jml</th>
-                  <th className="p-4 border border-slate-200 text-center font-bold uppercase tracking-tighter">Status</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white">
-                {data.map(s => (
-                  <tr key={s.id} className="border border-slate-100 hover:bg-slate-50/50 transition-colors">
-                    <td className="p-3 border border-slate-100 text-slate-600">{s.tanggal}</td>
-                    <td className="p-3 border border-slate-100 font-bold text-blue-900">{s.kodeUnik}</td>
-                    <td className="p-3 border border-slate-100">
-                      <div className="font-semibold text-slate-800">{s.pemohon}</div>
-                      <div className="text-[9px] text-slate-500 italic">{s.unitKerja}</div>
-                    </td>
-                    <td className="p-3 border border-slate-100">
-                      {s.items.map((it, i) => (
-                        <div key={i} className="mb-2 last:mb-0">
-                          <span className="font-medium text-slate-700">• {it.namaBarang}</span>
-                          <span className="text-slate-500 italic ml-1 block text-[10px] leading-tight">Keperluan: {it.alasan || '-'}</span>
-                        </div>
-                      ))}
-                    </td>
-                    <td className="p-3 border border-slate-100 text-center font-bold text-slate-700">
-                      {s.items.reduce((a, b) => a + (Number(b.jumlah) || 0), 0)}
-                    </td>
-                    <td className="p-3 border border-slate-100 text-center">
-                      <span className={`px-2.5 py-1 rounded-md text-[9px] font-bold border uppercase inline-block shadow-sm ${getStatusColor(s.status)}`}>
-                        {s.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-                {data.length === 0 && (
-                  <tr>
-                    <td colSpan="6" className="p-10 text-center text-slate-400 italic font-sans">Belum ada data rekapan untuk periode ini.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="mt-12 hidden print:grid grid-cols-2 text-[11px] font-sans">
-            <div className="text-center">
-              <p className="mb-24">Mengetahui,</p>
-              <p className="font-bold underline uppercase tracking-wider text-slate-900">Kepala Unit Kerja</p>
-              <p className="text-[9px] text-slate-400 mt-1">NIP. .......................................</p>
+
+        {/* Tabel Modern (Wrapped with Ref for Image Capture) */}
+        <div ref={reportRef} className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden print:border-none print:shadow-none">
+          <div className="p-8 print:p-0">
+            {/* Header Laporan untuk Print & Image */}
+            <div className="text-center mb-10 border-b-2 border-slate-900 pb-6">
+              <h1 className="text-3xl font-bold uppercase tracking-widest text-slate-900 mb-1">Nota Dinas & Pengadaan</h1>
+              <p className="text-sm font-medium text-slate-600 italic">Laporan Rekapitulasi Barang — Periode {new Date(0, filter.bulan-1).toLocaleString('id', {month: 'long'})} {filter.tahun}</p>
             </div>
-            <div className="text-center">
-              <p className="mb-24 italic text-slate-700">Jakarta, {new Date().toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'})}</p>
-              <p className="font-bold underline uppercase tracking-wider text-slate-900">{user?.displayName || 'Petugas Administrasi'}</p>
-              <p className="text-[9px] text-slate-400 mt-1">Staf Administrasi Umum</p>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-separate border-spacing-0">
+                <thead>
+                  <tr className="bg-slate-50/80">
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-t border-slate-100 first:rounded-tl-2xl">Tanggal</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-t border-slate-100">Kode Unik</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-t border-slate-100">Pemohon / Unit</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-t border-slate-100">Daftar Barang</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-t border-slate-100 text-center">Qty</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-t border-slate-100 text-center last:rounded-tr-2xl">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {data.length > 0 ? data.map((s, idx) => (
+                    <tr key={s.id} className="group hover:bg-slate-50/50 transition-colors">
+                      <td className="px-6 py-5 align-top">
+                        <div className="text-sm font-medium text-slate-600">{new Date(s.tanggal).toLocaleDateString('id-ID', {day: '2-digit', month: 'short', year: 'numeric'})}</div>
+                      </td>
+                      <td className="px-6 py-5 align-top">
+                        <span className="text-xs font-bold text-blue-600 bg-blue-50/50 px-2 py-1 rounded-lg border border-blue-100">{s.kodeUnik}</span>
+                      </td>
+                      <td className="px-6 py-5 align-top">
+                        <div className="text-sm font-bold text-slate-800">{s.pemohon}</div>
+                        <div className="text-[10px] font-medium text-slate-400 uppercase tracking-tight">{s.unitKerja}</div>
+                      </td>
+                      <td className="px-6 py-5 align-top">
+                        <div className="space-y-1">
+                          {s.items.map((it, i) => (
+                            <div key={i} className="text-xs text-slate-600 flex items-start gap-1.5">
+                              <span className="mt-1.5 w-1 h-1 rounded-full bg-slate-300 flex-shrink-0"></span>
+                              <span>{it.namaBarang}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-6 py-5 align-top text-center">
+                        <span className="text-xs font-black text-slate-700">{s.items.reduce((a, b) => a + Number(b.jumlah), 0)}</span>
+                      </td>
+                      <td className="px-6 py-5 align-top text-center">
+                        <span className={`inline-block px-3 py-1 rounded-full text-[9px] font-black uppercase border tracking-widest ${getStatusStyle(s.status)}`}>
+                          {s.status}
+                        </span>
+                      </td>
+                    </tr>
+                  )) : (
+                    <tr>
+                      <td colSpan="6" className="px-6 py-20 text-center text-slate-400 italic font-medium">
+                        Tidak ada data pengajuan ditemukan untuk periode ini.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer Laporan (Muncul di Print & Gambar) */}
+            <div className="grid grid-cols-2 mt-20 text-center">
+              <div>
+                <p className="text-xs text-slate-500 mb-16 uppercase font-bold tracking-widest">Dibuat Oleh,</p>
+                <div className="w-40 border-b border-slate-900 mx-auto"></div>
+                <p className="text-xs mt-2 font-bold uppercase">Bagian Umum & RT</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-16 uppercase font-bold tracking-widest">Mengetahui,</p>
+                <div className="w-40 border-b border-slate-900 mx-auto"></div>
+                <p className="text-xs mt-2 font-bold uppercase">Kepala Divisi</p>
+              </div>
             </div>
           </div>
         </div>
@@ -486,59 +669,51 @@ const App = () => {
   };
 
   if (loading) return (
-    <div className="h-screen flex flex-col items-center justify-center font-sans bg-slate-50">
+    <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
       <div className="animate-spin text-blue-600 mb-4"><RotateCcw size={40}/></div>
-      <p className="text-slate-500 font-medium">Menghubungkan ke database Firebase...</p>
+      <p className="text-slate-500 font-medium">Memuat Database Nota Dinas...</p>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 flex font-sans">
-      <div className="w-64 bg-slate-900 text-white min-h-screen p-4 flex flex-col fixed left-0 top-0 print:hidden shadow-xl z-10">
-        <div className="flex items-center gap-3 mb-10 px-2">
-          <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-500/20"><FileText size={24} /></div>
-          <h1 className="font-bold text-xl tracking-tight">E-OFFICE</h1>
+    <div className="min-h-screen bg-slate-50 flex">
+      <div className="w-64 bg-slate-900 text-white min-h-screen p-4 flex flex-col fixed left-0 top-0 print:hidden z-10">
+        <div className="flex items-center gap-3 mb-10 px-2 pt-4">
+          <div className="bg-blue-600 p-2 rounded-lg"><FileText size={24} /></div>
+          <h1 className="font-bold text-xl tracking-tight">NOTADINAS RT</h1>
         </div>
         <nav className="flex-1 space-y-2">
-          <NavItem icon={<LayoutDashboard size={20}/>} label="Dashboard" id="dashboard" activeTab={activeTab} setActiveTab={setActiveTab} />
-          <NavItem icon={<Plus size={20}/>} label="Pengajuan" id="form" activeTab={activeTab} setActiveTab={setActiveTab} />
-          <NavItem icon={<Database size={20}/>} label="Database" id="database" activeTab={activeTab} setActiveTab={setActiveTab} />
+          <NavItem icon={<LayoutDashboard size={20}/>} label="Beranda" id="dashboard" activeTab={activeTab} setActiveTab={setActiveTab} />
+          <NavItem icon={<Plus size={20}/>} label="Buat Pengajuan" id="form" activeTab={activeTab} setActiveTab={setActiveTab} />
+          <NavItem icon={<Database size={20}/>} label="Arsip Nota" id="database" activeTab={activeTab} setActiveTab={setActiveTab} />
           <NavItem icon={<PackageCheck size={20}/>} label="Serah Terima" id="delivery" activeTab={activeTab} setActiveTab={setActiveTab} />
           <NavItem icon={<FileBarChart size={20}/>} label="Laporan" id="report" activeTab={activeTab} setActiveTab={setActiveTab} />
         </nav>
-        <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 mt-4">
-          <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Status Koneksi</p>
+        <div className="p-4 bg-slate-800 rounded-xl border border-slate-700 mt-4">
+          <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Status Server</p>
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${user ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-red-500 animate-pulse'}`}></div>
-            <span className="text-xs text-slate-300">{user ? 'Terhubung (Cloud)' : 'Menghubungkan...'}</span>
+            <span className="text-xs text-slate-300">{user ? 'Online' : 'Offline'}</span>
           </div>
         </div>
       </div>
-      <main className="ml-64 flex-1 p-8 print:ml-0 print:p-0 min-h-screen">
+
+      <main className="ml-64 flex-1 p-8 print:ml-0 print:p-0 min-h-screen transition-all">
         {activeTab === 'dashboard' && renderDashboard()}
         {activeTab === 'form' && renderForm()}
         {activeTab === 'database' && renderDatabase()}
         {activeTab === 'delivery' && renderDelivery()}
         {activeTab === 'report' && renderReport()}
       </main>
+
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700&display=swap');
-        
-        .font-sans { font-family: 'Inter', sans-serif; }
-        .font-serif { font-family: 'Playfair Display', serif; }
-
-        .report-content table {
-          border-spacing: 0;
-          border-collapse: collapse;
-        }
-
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
         @media print { 
-          @page { size: landscape; margin: 1cm; } 
           .print\\:hidden { display: none !important; } 
-          body { background: white; color: black; }
-          main { padding: 0 !important; margin-left: 0 !important; }
-          .bg-white { background-color: white !important; }
-          .shadow-sm { box-shadow: none !important; }
+          main { padding: 0 !important; margin: 0 !important; width: 100% !important; max-width: 100% !important; }
+          .rounded-3xl { border-radius: 0 !important; }
+          .shadow-xl { box-shadow: none !important; }
         }
       `}</style>
     </div>
