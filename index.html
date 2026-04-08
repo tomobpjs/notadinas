@@ -1,234 +1,468 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { 
-  FileText, 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  onSnapshot, 
+  updateDoc, 
+  doc, 
+  serverTimestamp,
+  query
+} from 'firebase/firestore';
+import { 
   LayoutDashboard, 
+  FileText, 
+  Database, 
+  PackageCheck, 
   FileBarChart, 
   Plus, 
-  Search, 
-  Printer, 
-  Image as ImageIcon, 
   Trash2, 
-  CheckCircle,
+  RotateCcw,
+  CheckCircle2,
   Clock,
-  ChevronRight
+  XCircle,
+  AlertCircle,
+  Edit3,
+  X,
+  Camera,
+  Download
 } from 'lucide-react';
 
-/**
- * Komponen Utama Aplikasi Nota Dinas (E-OFFICE)
- * Mengelola dashboard dan pratinjau laporan rekapitulasi.
- */
-const App = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [submissions, setSubmissions] = useState([
-    { id: 1, pemohon: "Budi Santoso", unit: "IT Support", perihal: "Pengadaan Laptop", status: "Selesai", tanggal: "2024-03-20" },
-    { id: 2, pemohon: "Siti Aminah", unit: "HRD", perihal: "Permintaan ATK", status: "Pending", tanggal: "2024-03-21" }
-  ]);
-  const reportRef = useRef(null);
+// --- Inisialisasi Firebase ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-  // Fungsi untuk memicu dialog cetak browser
-  const handlePrint = () => {
-    window.print();
+// Perbaikan RULE 1: Membersihkan appId agar tidak merusak struktur path
+const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const appId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '_'); 
+
+const App = () => {
+  const [user, setUser] = useState(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [submissions, setSubmissions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingDoc, setEditingDoc] = useState(null);
+
+  const [formData, setFormData] = useState({
+    kategori: 'Nota Dinas',
+    tanggal: new Date().toISOString().split('T')[0],
+    pemohon: '',
+    unitKerja: '',
+    items: [{ id: Date.now(), namaBarang: '', spesifikasi: '', jumlah: '', alasan: '' }]
+  });
+
+  // (1) Alur Autentikasi (RULE 3)
+  useEffect(() => {
+    const handleAuth = async () => {
+      try {
+        // Selalu prioritaskan custom token jika tersedia
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.error("Auth error:", err);
+      }
+    };
+
+    handleAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+        setIsAuthReady(true);
+      } else {
+        setUser(null);
+        setIsAuthReady(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // (2) Sinkronisasi Data Firestore (RULE 1, 2, & 3)
+  useEffect(() => {
+    // PROTEKSI KRITIKAL: Jangan jalankan query jika user belum terautentikasi
+    if (!user || !isAuthReady) return;
+
+    // RULE 1: Gunakan path koleksi publik yang tepat
+    const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'submissions');
+    
+    // RULE 2: Query sederhana (tanpa sorting di sisi Firestore untuk menghindari kebutuhan indeks)
+    const q = query(colRef);
+
+    setLoading(true);
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        const docsData = snapshot.docs.map(d => ({ 
+          id: d.id, 
+          ...d.data() 
+        }));
+        
+        // Sorting dilakukan di memori (Javascript)
+        const sortedData = docsData.sort((a, b) => {
+          const dateA = a.createdAt?.seconds || 0;
+          const dateB = b.createdAt?.seconds || 0;
+          return dateB - dateA;
+        });
+        
+        setSubmissions(sortedData);
+        setLoading(false);
+      },
+      (error) => {
+        // Jika error "insufficient permissions", biasanya karena listener dipasang sebelum auth beres
+        console.error("Firestore Permission Error:", error);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user, isAuthReady]);
+
+  // Handlers
+  const handleItemChange = (index, field, value, isEdit = false) => {
+    const targetSetState = isEdit ? setEditingDoc : setFormData;
+    targetSetState(prev => {
+      const newItems = [...prev.items];
+      newItems[index] = { ...newItems[index], [field]: value };
+      return { ...prev, items: newItems };
+    });
   };
 
+  const addItem = (isEdit = false) => {
+    const newItem = { id: Date.now(), namaBarang: '', spesifikasi: '', jumlah: '', alasan: '' };
+    const targetSetState = isEdit ? setEditingDoc : setFormData;
+    targetSetState(prev => ({ ...prev, items: [...prev.items, newItem] }));
+  };
+
+  const removeItem = (index, isEdit = false) => {
+    const targetSetState = isEdit ? setEditingDoc : setFormData;
+    targetSetState(prev => ({ 
+      ...prev, 
+      items: prev.items.filter((_, i) => i !== index) 
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!user) return; // Guard agar tidak menulis tanpa auth
+    
+    const kode = `${formData.kategori === 'Nota Dinas' ? 'ND' : 'FORM'}-${formData.tanggal.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    
+    try {
+      const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'submissions');
+      await addDoc(colRef, {
+        ...formData,
+        kodeUnik: kode,
+        status: 'Pending',
+        createdAt: serverTimestamp(),
+        userId: user.uid
+      });
+      
+      setFormData({
+        kategori: 'Nota Dinas',
+        tanggal: new Date().toISOString().split('T')[0],
+        pemohon: '',
+        unitKerja: '',
+        items: [{ id: Date.now(), namaBarang: '', spesifikasi: '', jumlah: '', alasan: '' }]
+      });
+      setActiveTab('database');
+    } catch (err) {
+      console.error("Gagal menyimpan data:", err);
+    }
+  };
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    if (!user || !editingDoc) return;
+    try {
+      const { id, createdAt, ...updateData } = editingDoc;
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'submissions', id);
+      await updateDoc(docRef, updateData);
+      setIsEditModalOpen(false);
+    } catch (err) {
+      console.error("Gagal memperbarui data:", err);
+    }
+  };
+
+  const handleStatusChange = async (docId, newStatus) => {
+    if (!user) return;
+    try {
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'submissions', docId);
+      await updateDoc(docRef, { status: newStatus });
+    } catch (err) {
+      console.error("Gagal mengubah status:", err);
+    }
+  };
+
+  const StatCard = ({ label, count, color, icon: IconComponent }) => {
+    const colorMap = {
+      blue: 'bg-blue-50 text-blue-600 border-blue-100',
+      yellow: 'bg-yellow-50 text-yellow-600 border-yellow-100',
+      indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+      green: 'bg-green-50 text-green-600 border-green-100',
+      red: 'bg-red-50 text-red-600 border-red-100',
+      gray: 'bg-slate-50 text-slate-600 border-slate-100'
+    };
+    return (
+      <div className={`p-4 rounded-2xl border ${colorMap[color] || colorMap.gray} flex flex-col items-center justify-center text-center shadow-sm`}>
+        <div className="mb-2 opacity-80">
+          {IconComponent && <IconComponent size={20} />}
+        </div>
+        <span className="text-2xl font-bold block">{count}</span>
+        <span className="text-[10px] uppercase font-bold opacity-70 tracking-wide">{label}</span>
+      </div>
+    );
+  };
+
+  const NavItem = ({ icon: IconComponent, label, id }) => (
+    <button
+      onClick={() => setActiveTab(id)}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
+        activeTab === id ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+      }`}
+    >
+      {IconComponent && <IconComponent size={20} />}
+      <span className="font-medium text-sm">{label}</span>
+    </button>
+  );
+
+  if (!isAuthReady) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
+        <div className="relative flex items-center justify-center">
+          <div className="absolute w-16 h-16 border-4 border-blue-200 rounded-full"></div>
+          <div className="absolute w-16 h-16 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+          <FileText className="text-blue-600" size={24}/>
+        </div>
+        <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-10 animate-pulse">Menghubungkan ke Server...</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
-      {/* Sidebar - Disembunyikan saat mencetak (no-print) */}
-      <aside className="w-72 bg-slate-900 text-white p-8 fixed h-full flex flex-col shadow-2xl no-print">
-        <div className="flex items-center gap-4 mb-12 px-2">
-          <div className="bg-blue-600 p-2.5 rounded-2xl shadow-lg shadow-blue-500/30">
-            <FileText size={28} strokeWidth={2.5} />
-          </div>
+    <div className="min-h-screen bg-slate-50 flex font-sans">
+      <div className="w-64 bg-slate-900 text-white min-h-screen p-4 flex flex-col fixed left-0 top-0 print:hidden z-10 shadow-2xl">
+        <div className="flex items-center gap-3 mb-10 px-2 mt-4">
+          <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-900/40"><FileText size={24} /></div>
           <div>
-            <h1 className="font-black text-2xl tracking-tight leading-none">E-OFFICE</h1>
-            <p className="text-[10px] text-slate-400 font-bold tracking-[0.2em] mt-1 uppercase">Nota Digital</p>
+             <h1 className="font-black text-xl tracking-tight leading-none text-white">OFFICE-CORE</h1>
+             <p className="text-[8px] text-blue-400 font-bold uppercase tracking-[0.2em] mt-1">Sistem Terpadu</p>
           </div>
         </div>
-
-        <nav className="flex-1 space-y-3">
-          <button 
-            onClick={() => setActiveTab('dashboard')}
-            className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-bold transition-all duration-300 ${activeTab === 'dashboard' ? 'bg-blue-600 shadow-lg shadow-blue-600/40 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
-          >
-            <LayoutDashboard size={20} /> Beranda
-          </button>
-          <button 
-            onClick={() => setActiveTab('report')}
-            className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-bold transition-all duration-300 ${activeTab === 'report' ? 'bg-blue-600 shadow-lg shadow-blue-600/40 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
-          >
-            <FileBarChart size={20} /> Laporan
-          </button>
+        <nav className="flex-1 space-y-2">
+          <NavItem icon={LayoutDashboard} label="Dashboard" id="dashboard" />
+          <NavItem icon={Plus} label="Pengajuan Baru" id="form" />
+          <NavItem icon={Database} label="Basis Data" id="database" />
+          <NavItem icon={PackageCheck} label="Logistik" id="delivery" />
+          <NavItem icon={FileBarChart} label="Laporan Kerja" id="report" />
         </nav>
-
-        <div className="mt-auto pt-8 border-t border-slate-800/50">
-          <div className="bg-slate-800/50 p-4 rounded-2xl flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center font-bold">AD</div>
-            <div>
-              <p className="text-xs font-bold">Admin User</p>
-              <p className="text-[10px] text-slate-500">Administrator</p>
-            </div>
+        <div className="mt-auto mb-4 p-4 bg-slate-800/40 rounded-2xl border border-slate-700/30">
+          <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-2 text-center">User ID</p>
+          <div className="flex items-center gap-3 overflow-hidden">
+             <div className="w-8 h-8 shrink-0 bg-blue-600 rounded-lg flex items-center justify-center text-xs font-bold text-white">
+                {user?.uid ? user.uid.charAt(0).toUpperCase() : '?'}
+             </div>
+             <div className="truncate">
+                <p className="text-[10px] text-white font-bold truncate">{user?.uid || 'Guest'}</p>
+                <p className="text-[9px] text-green-500 font-bold">Online</p>
+             </div>
           </div>
         </div>
-      </aside>
+      </div>
 
-      {/* Konten Utama */}
-      <main className="ml-72 flex-1 p-12 transition-all duration-500 print:m-0 print:p-0">
-        {activeTab === 'dashboard' ? (
-          <div className="max-w-6xl mx-auto space-y-10">
-            <header className="flex justify-between items-end">
-              <div>
-                <h2 className="text-4xl font-black text-slate-900 tracking-tight">Dashboard Utama</h2>
-                <p className="text-slate-500 font-medium mt-1 uppercase text-xs tracking-widest">Pantau status nota dinas anda</p>
-              </div>
-              <button className="bg-blue-600 text-white px-6 py-3.5 rounded-2xl font-bold flex items-center gap-2 shadow-xl shadow-blue-500/20 hover:scale-105 transition-transform">
-                <Plus size={20} /> Buat Nota Baru
-              </button>
-            </header>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <StatCard icon={<FileText className="text-blue-600" />} label="Total Pengajuan" value={submissions.length} color="blue" />
-              <StatCard icon={<Clock className="text-amber-600" />} label="Menunggu" value="1" color="amber" />
-              <StatCard icon={<CheckCircle className="text-emerald-600" />} label="Selesai" value="1" color="emerald" />
-            </div>
-
-            <div className="bg-white rounded-[2.5rem] border border-slate-200/60 shadow-sm overflow-hidden">
-              <div className="p-8 border-b border-slate-100 flex justify-between items-center">
-                <h3 className="font-bold text-lg">Aktivitas Terbaru</h3>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                  <input type="text" placeholder="Cari nota..." className="pl-10 pr-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-50/50">
-                    <tr>
-                      <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-wider">Pemohon</th>
-                      <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-wider">Perihal</th>
-                      <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-wider text-center">Status</th>
-                      <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-wider text-right">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {submissions.map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-50/80 transition-colors group">
-                        <td className="px-8 py-6">
-                          <p className="font-bold text-slate-800">{item.pemohon}</p>
-                          <p className="text-xs text-slate-400 font-medium">{item.unit}</p>
-                        </td>
-                        <td className="px-8 py-6 text-slate-600 font-medium">{item.perihal}</td>
-                        <td className="px-8 py-6 text-center">
-                          <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
-                            item.status === 'Selesai' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'
-                          }`}>
-                            {item.status}
-                          </span>
-                        </td>
-                        <td className="px-8 py-6 text-right">
-                          <button className="p-2 hover:bg-white hover:shadow-md rounded-lg text-slate-400 hover:text-blue-600 transition-all">
-                            <ChevronRight size={18} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+      <main className="ml-64 flex-1 p-8 print:ml-0 print:p-0">
+        {activeTab === 'dashboard' && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-slate-800">Ringkasan Sistem</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <StatCard label="Total" count={submissions.length} color="blue" icon={Database} />
+              <StatCard label="Pending" count={submissions.filter(s => s.status === 'Pending').length} color="yellow" icon={Clock} />
+              <StatCard label="Proses" count={submissions.filter(s => s.status === 'Proses').length} color="indigo" icon={RotateCcw} />
+              <StatCard label="Selesai" count={submissions.filter(s => s.status === 'Selesai').length} color="green" icon={CheckCircle2} />
+              <StatCard label="Ditolak" count={submissions.filter(s => s.status === 'Ditolak').length} color="red" icon={XCircle} />
+              <StatCard label="Batal" count={submissions.filter(s => s.status === 'Cancel').length} color="gray" icon={AlertCircle} />
             </div>
           </div>
-        ) : (
-          <div className="max-w-5xl mx-auto space-y-8">
-            <div className="flex justify-between items-center no-print">
-              <h2 className="text-2xl font-bold">Pratinjau Laporan</h2>
-              <div className="flex gap-4">
-                <button onClick={handlePrint} className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/20">
-                  <Printer size={18} /> Cetak Ke PDF
-                </button>
-              </div>
-            </div>
+        )}
 
-            {/* Area Laporan Fisik */}
-            <div ref={reportRef} className="bg-white p-16 rounded-[3rem] shadow-2xl border border-slate-200 print:shadow-none print:border-none print:p-0 print:m-0">
-              <div className="text-center mb-12 border-b-4 border-slate-900 pb-8">
-                <h1 className="text-3xl font-black uppercase tracking-[0.3em] text-slate-900 mb-2">Laporan Rekapitulasi Nota</h1>
-                <p className="text-slate-500 font-bold uppercase text-xs tracking-widest italic">Dokumen Internal Kantor Operasional</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-8 mb-12">
+        {activeTab === 'form' && (
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-2xl font-bold mb-6 text-slate-800">Buat Pengajuan Baru</h2>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase">Periode Laporan</p>
-                  <p className="font-bold text-slate-800">Maret 2024</p>
+                  <label className="text-xs font-bold text-slate-500 uppercase">Jenis Dokumen</label>
+                  <select className="w-full p-2.5 border border-slate-200 rounded-lg outline-none text-sm" value={formData.kategori} onChange={e => setFormData({...formData, kategori: e.target.value})}>
+                    <option>Nota Dinas</option><option>Formulir</option>
+                  </select>
                 </div>
-                <div className="text-right space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase">Dicetak Pada</p>
-                  <p className="font-bold text-slate-800">{new Date().toLocaleDateString('id-ID', { dateStyle: 'long' })}</p>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Tanggal Pengajuan</label>
+                  <input type="date" className="w-full p-2.5 border border-slate-200 rounded-lg outline-none text-sm" value={formData.tanggal} onChange={e => setFormData({...formData, tanggal: e.target.value})} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Nama Pemohon</label>
+                  <input type="text" className="w-full p-2.5 border border-slate-200 rounded-lg outline-none text-sm" placeholder="Nama lengkap" value={formData.pemohon} onChange={e => setFormData({...formData, pemohon: e.target.value})} required />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Unit/Bagian</label>
+                  <input type="text" className="w-full p-2.5 border border-slate-200 rounded-lg outline-none text-sm" placeholder="Unit kerja" value={formData.unitKerja} onChange={e => setFormData({...formData, unitKerja: e.target.value})} required />
                 </div>
               </div>
 
-              <table className="w-full text-left border-collapse mb-20">
-                <thead>
-                  <tr className="border-y-2 border-slate-900 bg-slate-50/50">
-                    <th className="px-4 py-5 font-black uppercase text-[10px] w-12 text-center">No</th>
-                    <th className="px-6 py-5 font-black uppercase text-[10px]">Nama Pemohon / Unit Kerja</th>
-                    <th className="px-6 py-5 font-black uppercase text-[10px]">Perihal Nota</th>
-                    <th className="px-6 py-5 font-black uppercase text-[10px] text-center">Status</th>
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-bold text-slate-700">Detail Barang</h3>
+                  <button type="button" onClick={() => addItem(false)} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-100">+ Tambah</button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="bg-slate-50 text-slate-500 text-left border-b"><th className="p-3">Nama Barang</th><th className="p-3">Spek</th><th className="p-3 text-center">Jml</th><th className="p-3">Alasan</th><th className="p-3"></th></tr></thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {formData.items.map((item, idx) => (
+                        <tr key={item.id}>
+                          <td className="p-2"><input className="w-full p-1 border-b border-transparent focus:border-blue-400 outline-none" value={item.namaBarang} onChange={e => handleItemChange(idx, 'namaBarang', e.target.value)} required /></td>
+                          <td className="p-2"><input className="w-full p-1 border-b border-transparent focus:border-blue-400 outline-none" value={item.spesifikasi} onChange={e => handleItemChange(idx, 'spesifikasi', e.target.value)} /></td>
+                          <td className="p-2"><input type="number" className="w-12 text-center border-b border-transparent focus:border-blue-400 outline-none" value={item.jumlah} onChange={e => handleItemChange(idx, 'jumlah', e.target.value)} required /></td>
+                          <td className="p-2"><input className="w-full p-1 border-b border-transparent focus:border-blue-400 outline-none" value={item.alasan} onChange={e => handleItemChange(idx, 'alasan', e.target.value)} required /></td>
+                          <td className="p-2 text-center"><button type="button" onClick={() => removeItem(idx)} className="text-red-300 hover:text-red-600" disabled={formData.items.length === 1}><Trash2 size={16}/></button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3">
+                <button type="button" onClick={() => setActiveTab('dashboard')} className="px-6 py-2 text-slate-600 font-bold">Batal</button>
+                <button type="submit" className="px-8 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200">Kirim Pengajuan</button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {activeTab === 'database' && (
+          <div className="space-y-4">
+            <h2 className="text-2xl font-bold text-slate-800">Riwayat Pengajuan</h2>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-slate-500 border-b">
+                  <tr>
+                    <th className="px-6 py-4">ID Transaksi</th>
+                    <th className="px-6 py-4">Pemohon</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {submissions.map((item, index) => (
-                    <tr key={item.id}>
-                      <td className="px-4 py-6 text-center font-bold text-slate-400">{index + 1}</td>
-                      <td className="px-6 py-6 font-bold">
-                        <span className="text-slate-900">{item.pemohon}</span>
-                        <div className="text-[9px] uppercase tracking-widest text-slate-400 mt-1">{item.unit}</div>
+                  {submissions.map(s => (
+                    <tr key={s.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4 font-bold text-slate-700">{s.kodeUnik}</td>
+                      <td className="px-6 py-4">
+                        <div className="font-semibold text-slate-800">{s.pemohon}</div>
+                        <div className="text-[10px] text-slate-400 uppercase tracking-wider">{s.unitKerja}</div>
                       </td>
-                      <td className="px-6 py-6 text-slate-600 font-medium">{item.perihal}</td>
-                      <td className="px-6 py-6 text-center">
-                        <span className="font-black text-[10px] uppercase border-b-2 border-slate-900 pb-0.5">{item.status}</span>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${
+                          s.status === 'Pending' ? 'bg-yellow-50 text-yellow-600 border-yellow-100' :
+                          s.status === 'Proses' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                          s.status === 'Selesai' ? 'bg-green-50 text-green-600 border-green-100' : 'bg-red-50 text-red-600 border-red-100'
+                        }`}>{s.status}</span>
+                      </td>
+                      <td className="px-6 py-4 flex gap-2">
+                        <button onClick={() => { setEditingDoc(s); setIsEditModalOpen(true); }} className="p-1.5 text-slate-400 hover:text-blue-600"><Edit3 size={16}/></button>
+                        <select className="text-[10px] p-1 border rounded bg-white" value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)}>
+                          <option value="Pending">Pending</option><option value="Proses">Proses</option><option value="Selesai">Selesai</option><option value="Ditolak">Ditolak</option>
+                        </select>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              {!loading && submissions.length === 0 && <p className="p-12 text-center text-slate-400 italic">Belum ada data tersedia.</p>}
+            </div>
+          </div>
+        )}
 
-              <div className="mt-32 flex justify-between px-12">
-                <div className="text-center">
-                  <p className="text-[10px] font-black uppercase text-slate-400 mb-24">Staff Pelaksana,</p>
-                  <div className="w-48 border-b-2 border-slate-900 mb-2 mx-auto"></div>
-                  <p className="font-bold uppercase text-xs">Administrasi Umum</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] font-black uppercase text-slate-400 mb-24">Menyetujui,</p>
-                  <div className="w-48 border-b-2 border-slate-900 mb-2 mx-auto"></div>
-                  <p className="font-bold uppercase text-xs">Kepala Divisi</p>
-                </div>
+        {activeTab === 'delivery' && (
+           <div className="p-12 bg-white rounded-3xl border border-dashed border-slate-300 text-center flex flex-col items-center">
+             <PackageCheck size={48} className="text-slate-200 mb-4"/>
+             <h3 className="font-bold text-slate-800">Modul Logistik</h3>
+             <p className="text-slate-400 text-sm max-w-sm mt-2 italic">Data akan muncul secara otomatis ketika status pengajuan diubah menjadi "Proses".</p>
+           </div>
+        )}
+
+        {activeTab === 'report' && (
+          <div className="space-y-6">
+            <header className="flex justify-between items-center print:hidden">
+              <h2 className="text-2xl font-bold text-slate-800">Laporan Transaksional</h2>
+              <button onClick={() => window.print()} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg"><Download size={14}/> Ekspor PDF</button>
+            </header>
+            <div className="bg-white border rounded-3xl p-12 print:p-0 shadow-sm">
+              <div className="text-center mb-12 border-b pb-8">
+                 <h1 className="font-black text-2xl uppercase tracking-[0.1em] text-slate-900">Rekapitulasi Pengadaan Barang</h1>
+                 <p className="text-slate-400 text-sm mt-1 font-bold uppercase tracking-widest">Sistem OFFICE-CORE</p>
               </div>
+              <table className="w-full text-left text-[11px] border-collapse">
+                <thead className="bg-slate-900 text-white">
+                  <tr><th className="p-3 border">TANGGAL</th><th className="p-3 border">KODE</th><th className="p-3 border">PEMOHON</th><th className="p-3 border text-center">STATUS</th></tr>
+                </thead>
+                <tbody>
+                  {submissions.map(s => (
+                    <tr key={s.id} className="border-b">
+                      <td className="p-3 border border-slate-100">{s.tanggal}</td>
+                      <td className="p-3 border border-slate-100 font-bold">{s.kodeUnik}</td>
+                      <td className="p-3 border border-slate-100">{s.pemohon} ({s.unitKerja})</td>
+                      <td className="p-3 border border-slate-100 text-center font-bold">{s.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
       </main>
-    </div>
-  );
-};
 
-/**
- * Komponen kartu statistik untuk dashboard.
- */
-const StatCard = ({ icon, label, value, color }) => {
-  const colorMap = {
-    blue: 'bg-blue-50',
-    amber: 'bg-amber-50',
-    emerald: 'bg-emerald-50'
-  };
+      {/* Modal Edit */}
+      {isEditModalOpen && editingDoc && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-100">
+            <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
+              <h3 className="font-bold text-slate-800">Perbarui Pengajuan {editingDoc.kodeUnik}</h3>
+              <button onClick={() => setIsEditModalOpen(false)}><X size={20}/></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Nama Pemohon</label>
+                  <input className="w-full p-2 border rounded-lg text-sm" value={editingDoc.pemohon || ''} onChange={e => setEditingDoc({...editingDoc, pemohon: e.target.value})} placeholder="Nama" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Unit Kerja</label>
+                  <input className="w-full p-2 border rounded-lg text-sm" value={editingDoc.unitKerja || ''} onChange={e => setEditingDoc({...editingDoc, unitKerja: e.target.value})} placeholder="Unit" />
+                </div>
+              </div>
+              <button onClick={handleUpdate} className="w-full py-2 bg-blue-600 text-white rounded-lg font-bold">Simpan Perubahan</button>
+            </div>
+          </div>
+        </div>
+      )}
 
-  return (
-    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200/60 shadow-sm flex items-center gap-6 group hover:shadow-xl hover:shadow-slate-200/50 transition-all">
-      <div className={`p-4 rounded-2xl ${colorMap[color] || 'bg-slate-50'} group-hover:scale-110 transition-transform duration-500`}>
-        {icon}
-      </div>
-      <div>
-        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">{label}</p>
-        <h3 className="text-3xl font-black text-slate-900">{value}</h3>
-      </div>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; margin: 0; }
+        @media print {
+          .print\\:hidden { display: none !important; }
+          main { margin-left: 0 !important; width: 100% !important; padding: 0 !important; }
+        }
+      `}</style>
     </div>
   );
 };
