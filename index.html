@@ -7,7 +7,6 @@ import {
   addDoc, 
   onSnapshot, 
   updateDoc, 
-  deleteDoc,
   doc, 
   query, 
   serverTimestamp 
@@ -30,8 +29,7 @@ import {
   RotateCcw,
   AlertCircle,
   Edit3,
-  X,
-  AlertTriangle
+  X
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
@@ -87,7 +85,6 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState(null);
-  const [deleteId, setDeleteId] = useState(null); // State untuk konfirmasi hapus
 
   // Form State
   const [formData, setFormData] = useState({
@@ -108,10 +105,12 @@ const App = () => {
   useEffect(() => {
     const initAuth = async () => {
       try {
+        // Mencoba masuk dengan custom token lingkungan jika ada
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           try {
             await signInWithCustomToken(auth, __initial_auth_token);
           } catch (tokenError) {
+            // Jika token mismatch (biasanya karena pindah project), gunakan fallback Anonymous
             console.warn("Custom token mismatch, falling back to Anonymous auth.");
             await signInAnonymously(auth);
           }
@@ -188,16 +187,6 @@ const App = () => {
     const { id, createdAt, ...updateData } = editingDoc;
     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', id), updateData);
     setIsEditModalOpen(false);
-  };
-
-  const confirmDelete = async () => {
-    if (!user || !deleteId) return;
-    try {
-      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', deleteId));
-      setDeleteId(null);
-    } catch (error) {
-      console.error("Error deleting doc:", error);
-    }
   };
 
   // Views
@@ -316,9 +305,8 @@ const App = () => {
                   }`}>{s.status}</span>
                 </td>
                 <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => { setEditingDoc(s); setIsEditModalOpen(true); }} className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors" title="Edit Pengajuan"><Edit3 size={16}/></button>
-                    <button onClick={() => setDeleteId(s.id)} className="p-1.5 text-slate-400 hover:text-red-600 transition-colors" title="Hapus Pengajuan"><Trash2 size={16}/></button>
+                  <div className="flex gap-2">
+                    <button onClick={() => { setEditingDoc(s); setIsEditModalOpen(true); }} className="p-1.5 text-slate-400 hover:text-blue-600"><Edit3 size={16}/></button>
                     <select className="text-[10px] p-1 border rounded bg-white text-slate-600 focus:ring-1 focus:ring-blue-400 outline-none" value={s.status} onChange={async (e) => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', s.id), { status: e.target.value })}>
                       <option value="Pending">Pending</option><option value="Proses">Proses</option><option value="Selesai">Selesai</option><option value="Ditolak">Ditolak</option><option value="Cancel">Cancel</option>
                     </select>
@@ -329,23 +317,6 @@ const App = () => {
           </tbody>
         </table>
       </div>
-
-      {/* MODAL KONFIRMASI HAPUS */}
-      {deleteId && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center">
-            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
-              <AlertTriangle size={32} />
-            </div>
-            <h3 className="text-lg font-bold text-slate-800 mb-2">Hapus Pengajuan?</h3>
-            <p className="text-sm text-slate-500 mb-6">Tindakan ini permanen dan data tidak dapat dipulihkan kembali.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setDeleteId(null)} className="flex-1 py-2 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50">Batal</button>
-              <button onClick={confirmDelete} className="flex-1 py-2 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 shadow-lg shadow-red-200">Hapus Data</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {isEditModalOpen && editingDoc && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
