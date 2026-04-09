@@ -1,404 +1,889 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-  getAuth,
-  signInAnonymously, 
-  signInWithCustomToken,
-  onAuthStateChanged
-} from 'firebase/auth';
-import { 
-  getFirestore, 
-  collection, 
-  addDoc, 
-  onSnapshot, 
-  doc, 
-  updateDoc, 
-  deleteDoc,
-  query
-} from 'firebase/firestore';
-import { 
-  LayoutDashboard, 
-  FilePlus, 
-  Database, 
-  Plus, 
-  Trash2, 
-  Download, 
-  Filter, 
-  ChevronRight,
-  CheckCircle,
-  Clock,
-  XCircle,
-  RotateCw,
-  AlertCircle,
-  BarChart3,
-  PieChart,
-  Edit3,
-  Save,
-  X,
-  FileText,
-  Search,
-  MessageSquare,
-  Settings
-} from 'lucide-react';
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Nota Dinas Professional v4.0 (Cloud)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
+            font-size: 12px;
+        }
 
-// --- KONFIGURASI FIREBASE ---
-const firebaseConfig = {
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+        }
+
+        .input-field {
+            background: #1e293b;
+            border: 1px solid #334155;
+            color: #f8fafc;
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-size: 11px;
+            width: 100%;
+        }
+
+        .input-field:focus {
+            outline: 2px solid #3b82f6;
+            border-color: transparent;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            transition: all 0.3s ease;
+        }
+
+        .sidebar-link.active {
+            background-color: #1e293b;
+            color: #3b82f6;
+            border-right: 3px solid #3b82f6;
+        }
+
+        /* Status Badge Colors */
+        .badge-pending { background: rgba(234, 179, 8, 0.15); color: #eab308; border: 1px solid rgba(234, 179, 8, 0.3); }
+        .badge-proses { background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); }
+        .badge-done { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .badge-ditolak { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .badge-cancel { background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }
+
+        .status-badge-base {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            display: inline-block;
+        }
+
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; color: black; }
+            .glass-card { border: 1px solid #ccc; background: white; backdrop-filter: none; color: black; }
+            main { padding: 0 !important; }
+            .status-badge-base { border: 1px solid #000 !important; color: black !important; background: none !important; }
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+
+        #sync-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: bold;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex">
+
+    <!-- Status Cloud Indicator -->
+    <div id="sync-indicator" class="bg-slate-800 text-slate-400 border border-slate-700 no-print">
+        <i class="fas fa-cloud mr-2"></i> Connecting to Cloud...
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="w-64 bg-slate-900 border-r border-slate-800 p-6 hidden md:flex flex-col shrink-0 no-print">
+        <div class="flex items-center gap-3 mb-10">
+            <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
+                <i class="fas fa-file-invoice text-white"></i>
+            </div>
+            <h1 class="font-bold text-lg tracking-tight text-white">E-DOCS <span class="text-blue-500">PRO</span></h1>
+        </div>
+        
+        <nav class="space-y-1 flex-1">
+            <button onclick="switchTab('dashboard')" class="sidebar-link w-full flex items-center gap-3 p-3 rounded-lg text-slate-400 hover:text-white" id="nav-dashboard">
+                <i class="fas fa-chart-line w-5"></i> Dashboard
+            </button>
+            <button onclick="switchTab('pengajuan')" class="sidebar-link w-full flex items-center gap-3 p-3 rounded-lg text-slate-400 hover:text-white" id="nav-pengajuan">
+                <i class="fas fa-plus-circle w-5"></i> Pengajuan Baru
+            </button>
+            <button onclick="switchTab('database')" class="sidebar-link w-full flex items-center gap-3 p-3 rounded-lg text-slate-400 hover:text-white" id="nav-database">
+                <i class="fas fa-database w-5"></i> Database Rekap
+            </button>
+            <button onclick="switchTab('bulanan')" class="sidebar-link w-full flex items-center gap-3 p-3 rounded-lg text-slate-400 hover:text-white" id="nav-bulanan">
+                <i class="fas fa-calendar-alt w-5"></i> Laporan Bulanan
+            </button>
+            <button onclick="switchTab('laporan')" class="sidebar-link w-full flex items-center gap-3 p-3 rounded-lg text-slate-400 hover:text-white" id="nav-laporan">
+                <i class="fas fa-file-chart-pie w-5"></i> Laporan Tahunan
+            </button>
+        </nav>
+        
+        <div class="pt-6 border-t border-slate-800 text-[10px] text-slate-500">
+            User ID: <span id="user-display" class="font-mono text-slate-400">Loading...</span><br>
+            © 2024-2030 Admin System
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto bg-[#0a0f1d] p-4 md:p-8">
+        
+        <!-- Tab: Dashboard -->
+        <section id="tab-dashboard" class="tab-content">
+            <header class="mb-8">
+                <h2 class="text-2xl font-bold text-white">Ringkasan Sistem</h2>
+                <p class="text-slate-400">Pemantauan distribusi status barang terpusat (Real-time).</p>
+            </header>
+
+            <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+                <div class="glass-card p-4 border-l-4 border-blue-500">
+                    <p class="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Proses</p>
+                    <h3 class="text-2xl font-bold mt-1" id="stat-proses">0</h3>
+                </div>
+                <div class="glass-card p-4 border-l-4 border-yellow-500">
+                    <p class="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Pending</p>
+                    <h3 class="text-2xl font-bold mt-1" id="stat-pending">0</h3>
+                </div>
+                <div class="glass-card p-4 border-l-4 border-red-500">
+                    <p class="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Ditolak</p>
+                    <h3 class="text-2xl font-bold mt-1" id="stat-ditolak">0</h3>
+                </div>
+                <div class="glass-card p-4 border-l-4 border-emerald-500">
+                    <p class="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Selesai</p>
+                    <h3 class="text-2xl font-bold mt-1" id="stat-selesai">0</h3>
+                </div>
+                <div class="glass-card p-4 border-l-4 border-slate-600">
+                    <p class="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Cancel</p>
+                    <h3 class="text-2xl font-bold mt-1" id="stat-cancel">0</h3>
+                </div>
+            </div>
+
+            <div class="glass-card p-6">
+                <h4 class="font-semibold text-slate-200 uppercase text-xs tracking-widest mb-6">Aktivitas Terakhir</h4>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="text-slate-500 border-b border-slate-800 text-[10px] uppercase">
+                                <th class="pb-3">Kode Tiket</th>
+                                <th class="pb-3">Pemohon</th>
+                                <th class="pb-3">Kategori</th>
+                                <th class="pb-3">Tanggal</th>
+                                <th class="pb-3">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-activity-body" class="divide-y divide-slate-800/50"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab: Pengajuan -->
+        <section id="tab-pengajuan" class="tab-content hidden">
+            <header class="mb-8">
+                <h2 class="text-2xl font-bold text-white">Input Pengajuan</h2>
+                <p class="text-slate-400">Buat permohonan baru untuk Nota Dinas atau Formulir.</p>
+            </header>
+
+            <form id="formPengajuan" class="space-y-6">
+                <div class="glass-card p-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="md:col-span-2">
+                        <label class="block mb-1 text-slate-400 font-medium">Kategori</label>
+                        <select id="inputKategori" class="input-field" required>
+                            <option value="Nota Dinas">Nota Dinas (ND)</option>
+                            <option value="Formulir">Formulir (Form)</option>
+                        </select>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block mb-1 text-slate-400 font-medium">Tanggal</label>
+                        <input type="date" id="inputTanggal" class="input-field" required>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block mb-1 text-slate-400 font-medium">Nama Pemohon</label>
+                        <input type="text" id="inputPemohon" class="input-field" placeholder="Nama Lengkap" required>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block mb-1 text-slate-400 font-medium">Unit Kerja</label>
+                        <input type="text" id="inputUnit" class="input-field" placeholder="Departemen" required>
+                    </div>
+                </div>
+
+                <div class="glass-card p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h4 class="font-bold text-blue-400 uppercase text-[10px] tracking-widest">Rincian Barang</h4>
+                        <button type="button" onclick="addRow()" class="bg-blue-600/20 text-blue-500 px-3 py-1.5 rounded text-[10px] font-bold border border-blue-500/30">
+                            <i class="fas fa-plus mr-1"></i> TAMBAH BARIS
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="text-slate-500 text-[10px] uppercase border-b border-slate-800">
+                                    <th class="pb-2 text-left">Nama Barang</th>
+                                    <th class="pb-2 text-left">Spesifikasi</th>
+                                    <th class="pb-2 text-left w-20">Qty</th>
+                                    <th class="pb-2 text-left">Alasan</th>
+                                    <th class="pb-2 text-center w-10">#</th>
+                                </tr>
+                            </thead>
+                            <tbody id="barangBody">
+                                <tr class="border-b border-slate-800/30">
+                                    <td class="py-2 pr-2"><input type="text" class="input-field item-nama" required></td>
+                                    <td class="py-2 pr-2"><input type="text" class="input-field item-spek"></td>
+                                    <td class="py-2 pr-2"><input type="number" class="input-field item-jumlah" required></td>
+                                    <td class="py-2 pr-2"><input type="text" class="input-field item-alasan"></td>
+                                    <td class="py-2 text-center"><button type="button" onclick="removeRow(this)" class="text-slate-600 hover:text-red-500"><i class="fas fa-trash"></i></button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="flex justify-end"><button type="submit" id="btn-submit" class="btn-primary px-8 py-3 rounded-lg font-bold text-white shadow-lg text-xs uppercase tracking-widest">Simpan Pengajuan</button></div>
+            </form>
+        </section>
+
+        <!-- Tab: Database -->
+        <section id="tab-database" class="tab-content hidden">
+            <header class="mb-8 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">Database Pengajuan</h2>
+                    <p class="text-slate-400 italic text-[11px]">Gunakan ikon <i class="fas fa-pencil-alt mx-1"></i> untuk mengedit detail barang.</p>
+                </div>
+                <div class="flex gap-2 items-center bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                    <select id="filterBulan" class="bg-transparent text-[10px] outline-none text-slate-300 px-2 border-r border-slate-700">
+                        <option value="">Semua Bulan</option>
+                        <option value="01">Januari</option><option value="02">Februari</option><option value="03">Maret</option>
+                        <option value="04">April</option><option value="05">Mei</option><option value="06">Juni</option>
+                        <option value="07">Juli</option><option value="08">Agustus</option><option value="09">September</option>
+                        <option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+                    </select>
+                    <select id="filterTahun" class="bg-transparent text-[10px] outline-none text-slate-300 px-2 mr-2"></select>
+                </div>
+            </header>
+
+            <div class="glass-card overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-[11px]">
+                        <thead class="bg-slate-800/40 text-slate-400">
+                            <tr>
+                                <th class="p-4 uppercase font-bold w-32">Tiket/Tgl</th>
+                                <th class="p-4 uppercase font-bold w-40">Pemohon</th>
+                                <th class="p-4 uppercase font-bold">Rincian Barang</th>
+                                <th class="p-4 uppercase font-bold w-32">Status</th>
+                                <th class="p-4 uppercase font-bold w-40">Keterangan</th>
+                                <th class="p-4 uppercase font-bold w-16 text-center">Opsi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="databaseBody" class="divide-y divide-slate-800/50"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab: Laporan Bulanan -->
+        <section id="tab-bulanan" class="tab-content hidden">
+            <header class="mb-8 flex flex-col lg:flex-row lg:items-center justify-between gap-4 no-print">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">Laporan Bulanan</h2>
+                    <p class="text-slate-400 italic text-[11px]">Rekapitulasi detail seluruh pengajuan barang per bulan.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <select id="rptKategori" class="bg-slate-900 text-[10px] border border-slate-800 rounded px-3 py-2 text-slate-300">
+                        <option value="">Semua Kategori</option>
+                        <option value="Nota Dinas">Nota Dinas</option>
+                        <option value="Formulir">Formulir</option>
+                    </select>
+                    <select id="rptBulan" class="bg-slate-900 text-[10px] border border-slate-800 rounded px-3 py-2 text-slate-300">
+                        <option value="01">Januari</option><option value="02">Februari</option><option value="03">Maret</option>
+                        <option value="04">April</option><option value="05">Mei</option><option value="06">Juni</option>
+                        <option value="07">Juli</option><option value="08">Agustus</option><option value="09">September</option>
+                        <option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+                    </select>
+                    <select id="rptTahun" class="bg-slate-900 text-[10px] border border-slate-800 rounded px-3 py-2 text-slate-300"></select>
+                    <button onclick="renderReportBulanan()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-[10px] font-bold text-white uppercase tracking-tighter">Tampilkan</button>
+                    <button onclick="exportReportPDF()" class="bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded text-[10px] font-bold text-white"><i class="fas fa-file-pdf mr-1"></i> PDF</button>
+                    <button onclick="window.print()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded text-[10px] font-bold text-white"><i class="fas fa-print mr-1"></i> Cetak</button>
+                </div>
+            </header>
+
+            <div id="printArea" class="space-y-6">
+                <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 no-print" id="rptStatsGrid"></div>
+
+                <div class="glass-card p-4">
+                    <div class="text-center mb-6 hidden show-on-print">
+                        <h3 class="text-xl font-bold uppercase text-slate-800">Laporan Detail Rekapitulasi Barang</h3>
+                        <p id="rptHeaderInfo" class="text-sm text-slate-600 font-bold"></p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-[10px] border-collapse" id="tblBulanan">
+                            <thead class="bg-slate-800/60 text-slate-400">
+                                <tr>
+                                    <th class="p-2 border-b border-slate-700 w-20">Tgl / Tiket</th>
+                                    <th class="p-2 border-b border-slate-700 w-24">Pemohon</th>
+                                    <th class="p-2 border-b border-slate-700">Nama Barang</th>
+                                    <th class="p-2 border-b border-slate-700">Spesifikasi</th>
+                                    <th class="p-2 border-b border-slate-700 w-12 text-center">Qty</th>
+                                    <th class="p-2 border-b border-slate-700">Alasan</th>
+                                    <th class="p-2 border-b border-slate-700 w-20">Status</th>
+                                    <th class="p-2 border-b border-slate-700">Ket</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rptBulananBody" class="divide-y divide-slate-800/50">
+                                <tr><td colspan="8" class="p-8 text-center text-slate-500 italic">Silahkan pilih periode dan klik Tampilkan</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab: Laporan Tahunan -->
+        <section id="tab-laporan" class="tab-content hidden">
+            <header class="mb-8"><h2 class="text-2xl font-bold text-white">Laporan Tahunan</h2></header>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 glass-card p-6" id="yearly-stat-grid"></div>
+                <div class="glass-card p-6 flex flex-col items-center justify-center min-h-[350px]">
+                    <div class="relative w-48 h-48 flex items-center justify-center">
+                        <svg class="w-full h-full transform -rotate-90">
+                            <circle cx="96" cy="96" r="85" stroke="currentColor" stroke-width="12" fill="transparent" class="text-slate-800"></circle>
+                            <circle id="overall-progress" cx="96" cy="96" r="85" stroke="currentColor" stroke-width="12" fill="transparent" stroke-dasharray="534" stroke-dashoffset="534" class="text-blue-500 transition-all duration-1000" stroke-linecap="round"></circle>
+                        </svg>
+                        <div class="absolute text-center">
+                            <span class="text-4xl font-black text-white" id="overall-percent">0%</span>
+                            <p class="text-[8px] text-slate-500 uppercase mt-1">Status Done</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, query, addDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Configuration (Provided by environment)
+        const firebaseConfig = {
   apiKey: "AIzaSyAOAMNE1yBVB09dbO-4Rr-D7KPODU0-694",
   authDomain: "notadinasrt.firebaseapp.com",
   projectId: "notadinasrt",
   storageBucket: "notadinasrt.firebasestorage.app",
   messagingSenderId: "96523383307",
   appId: "1:96523383307:web:9a0bc43bd7f6375e050d0e"
-}; 
+};
 
-const app = initializeApp(firebaseConfig);
-  const [user, setUser] = useState(null);
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [submissions, setSubmissions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  
-  // State Edit
-  const [editingId, setEditingId] = useState(null);
-  const [editValues, setEditValues] = useState({});
-  const [editingItemId, setEditingItemId] = useState(null);
-  const [itemEditValues, setItemEditValues] = useState({});
+        // Global State
+        let pengajuanData = [];
+        let user = null;
+        let editingItemId = null;
 
-  // State Formulir
-  const [formData, setFormData] = useState({
-    kategori: 'Nota Dinas',
-    tanggal: new Date().toISOString().split('T')[0],
-    namaPemohon: '',
-    unitKerja: '',
-    items: [{ id: Date.now(), nama: '', spek: '', jumlah: 1, alasan: '', status: 'Pending', keterangan: '' }]
-  });
+        const statusStyleMap = {
+            'Pending': 'badge-pending',
+            'Proses': 'badge-proses',
+            'Done': 'badge-done',
+            'Ditolak': 'badge-ditolak',
+            'Cancel': 'badge-cancel'
+        };
 
-  // State Filter
-  const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
-  const [filterYear, setFilterYear] = useState(new Date().getFullYear());
-  const [filterKategori, setFilterKategori] = useState('Semua');
-  const [reportYear, setReportYear] = useState(new Date().getFullYear());
-  const [reportKategori, setReportKategori] = useState('Nota Dinas');
+        // UI Helpers
+        const updateSyncIndicator = (status, colorClass) => {
+            const el = document.getElementById('sync-indicator');
+            el.innerHTML = `<i class="fas fa-circle mr-2"></i> Cloud: ${status}`;
+            el.className = `fixed bottom-5 right-5 px-3 py-1.5 rounded-full text-[10px] font-bold z-50 no-print border ${colorClass}`;
+        };
 
-  // --- OTENTIKASI (RULE 3) ---
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          try {
-            await signInWithCustomToken(auth, __initial_auth_token);
-          } catch (e) {
-            await signInAnonymously(auth);
-          }
-        } else {
-          await signInAnonymously(auth);
+        // Exponential Backoff API Fetcher (Pattern)
+        const retryOperation = async (operation, maxRetries = 5) => {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    return await operation();
+                } catch (err) {
+                    if (i === maxRetries - 1) throw err;
+                    await new Promise(res => setTimeout(res, Math.pow(2, i) * 1000));
+                }
+            }
+        };
+
+        // Initialize Auth (Rule 3)
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("Auth failed:", err);
+                updateSyncIndicator("Auth Error", "bg-red-900/20 text-red-500 border-red-500/50");
+            }
+        };
+
+        initAuth();
+
+        onAuthStateChanged(auth, (u) => {
+            user = u;
+            if (user) {
+                document.getElementById('user-display').innerText = user.uid.substring(0, 8) + '...';
+                setupRealtimeSync();
+            }
+        });
+
+        // Firestore Real-time Listener (Rule 1 & 2)
+        function setupRealtimeSync() {
+            if (!user) return;
+            
+            // Mengambil data publik dari path yang diwajibkan
+            const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'nota-pengajuan'));
+            
+            updateSyncIndicator("Syncing...", "bg-blue-900/20 text-blue-500 border-blue-500/50");
+
+            onSnapshot(q, (snapshot) => {
+                pengajuanData = [];
+                snapshot.forEach(doc => {
+                    pengajuanData.push({ dbId: doc.id, ...doc.data() });
+                });
+                
+                // Sort by timestamp local (karena no complex queries di server)
+                pengajuanData.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+                renderDashboard();
+                renderDatabase();
+                renderLaporan();
+                renderReportBulanan();
+                
+                updateSyncIndicator("Connected", "bg-emerald-900/20 text-emerald-500 border-emerald-500/50");
+            }, (err) => {
+                console.error("Firestore error:", err);
+                updateSyncIndicator("Offline/Error", "bg-red-900/20 text-red-500 border-red-500/50");
+            });
         }
-      } catch (error) {
-        console.error("Auth error:", error);
-      }
-    };
-    initAuth();
-    
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-    });
-    return () => unsubscribe();
-  }, []);
 
-  // --- DATA FETCHING (RULE 1 & 2) ---
-  useEffect(() => {
-    if (!user) return;
-    
-    const q = collection(db, 'artifacts', appId, 'public', 'data', 'submissions');
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setSubmissions(data);
-      setLoading(false);
-    }, (err) => {
-      setLoading(false);
-    });
-    
-    return () => unsubscribe();
-  }, [user]);
+        // Action Functions
+        window.switchTab = (id) => {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+            document.getElementById(`tab-${id}`).classList.remove('hidden');
+            document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+            const navBtn = document.getElementById(`nav-${id}`);
+            if(navBtn) navBtn.classList.add('active');
+            
+            if(id === 'dashboard') renderDashboard();
+            if(id === 'database') renderDatabase();
+            if(id === 'laporan') renderLaporan();
+            if(id === 'bulanan') renderReportBulanan();
+        };
 
-  // --- HANDLERS ---
-  const handleAddItem = () => {
-    setFormData({
-      ...formData,
-      items: [...formData.items, { id: Date.now(), nama: '', spek: '', jumlah: 1, alasan: '', status: 'Pending', keterangan: '' }]
-    });
-  };
+        window.addRow = () => {
+            const tr = document.createElement('tr');
+            tr.className = "border-b border-slate-800/30";
+            tr.innerHTML = `
+                <td class="py-2 pr-2"><input type="text" class="input-field item-nama" required></td>
+                <td class="py-2 pr-2"><input type="text" class="input-field item-spek"></td>
+                <td class="py-2 pr-2"><input type="number" class="input-field item-jumlah" required></td>
+                <td class="py-2 pr-2"><input type="text" class="input-field item-alasan"></td>
+                <td class="py-2 text-center"><button type="button" onclick="removeRow(this)" class="text-slate-600 hover:text-red-500"><i class="fas fa-trash"></i></button></td>
+            `;
+            document.getElementById('barangBody').appendChild(tr);
+        };
 
-  const handleRemoveItem = (id) => {
-    if (formData.items.length > 1) {
-      setFormData({
-        ...formData,
-        items: formData.items.filter(item => item.id !== id)
-      });
-    }
-  };
+        window.removeRow = (btn) => {
+            if(document.querySelectorAll('#barangBody tr').length > 1) btn.closest('tr').remove();
+        };
 
-  const handleItemChange = (id, field, value) => {
-    const newItems = formData.items.map(item => 
-      item.id === id ? { ...item, [field]: value } : item
-    );
-    setFormData({ ...formData, items: newItems });
-  };
+        document.getElementById('formPengajuan').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!user) return alert("Menunggu koneksi cloud...");
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!user) return;
+            const btn = document.getElementById('btn-submit');
+            btn.disabled = true;
+            btn.innerText = "MENYIMPAN...";
 
-    const date = new Date(formData.tanggal);
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = String(date.getFullYear()).slice(-2);
-    const prefix = formData.kategori === 'Nota Dinas' ? 'ND' : 'F';
-    const kodeUnik = `${prefix}${day}${month}${year}-${Math.floor(100 + Math.random() * 900)}`;
+            const dateInput = document.getElementById('inputTanggal').value;
+            const date = new Date(dateInput);
+            const d = String(date.getDate()).padStart(2, '0');
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const y = String(date.getFullYear()).slice(-2);
+            const kat = document.getElementById('inputKategori').value;
+            const kode = kat === "Nota Dinas" ? `ND${d}${m}${y}-${Math.random().toString(36).substr(2,4).toUpperCase()}` : `FORM${d}-${Math.random().toString(36).substr(2,4).toUpperCase()}`;
+            
+            const items = [];
+            document.querySelectorAll('#barangBody tr').forEach(row => {
+                items.push({
+                    id: Math.random().toString(36).substr(2, 9),
+                    nama: row.querySelector('.item-nama').value,
+                    spek: row.querySelector('.item-spek').value,
+                    jumlah: row.querySelector('.item-jumlah').value,
+                    alasan: row.querySelector('.item-alasan').value,
+                    status: 'Pending',
+                    keterangan: ''
+                });
+            });
 
-    try {
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'submissions'), {
-        ...formData,
-        kodeUnik,
-        createdAt: new Date().toISOString(),
-        userId: user.uid
-      });
-      setFormData({
-        kategori: 'Nota Dinas',
-        tanggal: new Date().toISOString().split('T')[0],
-        namaPemohon: '',
-        unitKerja: '',
-        items: [{ id: Date.now(), nama: '', spek: '', jumlah: 1, alasan: '', status: 'Pending', keterangan: '' }]
-      });
-      setActiveTab('database');
-    } catch (error) {
-      console.error(error);
-    }
-  };
+            const newDoc = {
+                id: Date.now(),
+                timestamp: Date.now(),
+                kode, 
+                kategori: kat,
+                tanggal: dateInput,
+                pemohon: document.getElementById('inputPemohon').value,
+                unit: document.getElementById('inputUnit').value,
+                createdBy: user.uid,
+                items
+            };
 
-  // --- STATS LOGIC ---
-  const stats = useMemo(() => {
-    const counts = { Pending: 0, Proses: 0, Ditolak: 0, Selesai: 0, Cancel: 0 };
-    submissions.forEach(sub => {
-      sub.items.forEach(item => {
-        if (counts[item.status] !== undefined) counts[item.status]++;
-      });
-    });
-    return counts;
-  }, [submissions]);
+            try {
+                await retryOperation(() => addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'nota-pengajuan'), newDoc));
+                e.target.reset();
+                document.getElementById('barangBody').innerHTML = `
+                    <tr class="border-b border-slate-800/30">
+                        <td class="py-2 pr-2"><input type="text" class="input-field item-nama" required></td>
+                        <td class="py-2 pr-2"><input type="text" class="input-field item-spek"></td>
+                        <td class="py-2 pr-2"><input type="number" class="input-field item-jumlah" required></td>
+                        <td class="py-2 pr-2"><input type="text" class="input-field item-alasan"></td>
+                        <td class="py-2 text-center"><button type="button" onclick="removeRow(this)" class="text-slate-600 hover:text-red-500"><i class="fas fa-trash"></i></button></td>
+                    </tr>
+                `;
+                switchTab('dashboard');
+            } catch (err) {
+                console.error("Save failed:", err);
+                alert("Gagal menyimpan ke cloud. Periksa koneksi.");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "SIMPAN PENGAJUAN";
+            }
+        });
 
-  const filteredData = useMemo(() => {
-    return submissions.filter(sub => filterKategori === 'Semua' || sub.kategori === filterKategori);
-  }, [submissions, filterKategori]);
+        function renderDashboard() {
+            let stats = { Proses: 0, Pending: 0, Ditolak: 0, Done: 0, Cancel: 0 };
+            document.getElementById('recent-activity-body').innerHTML = '';
+            pengajuanData.forEach(e => e.items.forEach(i => stats[i.status]++));
+            
+            Object.keys(stats).forEach(k => {
+                const elId = `stat-${k.toLowerCase() === 'done' ? 'selesai' : k.toLowerCase()}`;
+                const el = document.getElementById(elId);
+                if(el) el.innerText = stats[k];
+            });
 
-  const yearlyStats = useMemo(() => {
-    const data = submissions.filter(sub => new Date(sub.tanggal).getFullYear() === parseInt(reportYear));
-    const counts = { Pending: 0, Proses: 0, Ditolak: 0, Selesai: 0, Cancel: 0 };
-    let total = 0;
-    data.forEach(sub => {
-      sub.items.forEach(item => {
-        if (counts[item.status] !== undefined) { counts[item.status]++; total++; }
-      });
-    });
-    const percentages = {};
-    Object.keys(counts).forEach(key => {
-      percentages[key] = total > 0 ? ((counts[key] / total) * 100).toFixed(1) : 0;
-    });
-    return { counts, percentages, total };
-  }, [submissions, reportYear]);
+            [...pengajuanData].slice(0, 5).forEach(r => {
+                document.getElementById('recent-activity-body').innerHTML += `
+                    <tr class="hover:bg-slate-800/30">
+                        <td class="py-3 font-mono text-blue-400 font-bold">${r.kode}</td>
+                        <td class="py-3 text-slate-300">${r.pemohon}</td>
+                        <td class="py-3 text-slate-500 text-[10px]">${r.kategori}</td>
+                        <td class="py-3 text-slate-500">${r.tanggal}</td>
+                        <td class="py-3"><span class="status-badge-base bg-blue-500/10 text-blue-500 border border-blue-500/20">Sync</span></td>
+                    </tr>
+                `;
+            });
+        }
 
-  if (loading) return (
-    <div className="flex h-screen items-center justify-center bg-[#0f172a]">
-      <RotateCw className="w-10 h-10 text-blue-500 animate-spin" />
-    </div>
-  );
+        function renderDatabase() {
+            const body = document.getElementById('databaseBody');
+            const fM = document.getElementById('filterBulan').value;
+            const fY = document.getElementById('filterTahun').value;
+            body.innerHTML = '';
 
-  return (
-    <div className="flex h-screen bg-[#0f172a] text-slate-200 overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-64 bg-[#1e293b] border-r border-slate-800 flex flex-col shrink-0">
-        <div className="p-6">
-          <div className="flex items-center gap-3 mb-10">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/20">
-              <FilePlus className="text-white w-6 h-6" />
-            </div>
-            <h1 className="text-xl font-black text-white">E-NOTA <span className="text-blue-500">PRO</span></h1>
-          </div>
-          <nav className="space-y-1.5">
-            <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-            <SidebarItem icon={FilePlus} label="Input Pengajuan" active={activeTab === 'input'} onClick={() => setActiveTab('input')} />
-            <SidebarItem icon={Database} label="Database Utama" active={activeTab === 'database'} onClick={() => setActiveTab('database')} />
-            <SidebarItem icon={FileText} label="Laporan Bulanan" active={activeTab === 'monthly'} onClick={() => setActiveTab('monthly')} />
-            <SidebarItem icon={BarChart3} label="Laporan Tahunan" active={activeTab === 'report'} onClick={() => setActiveTab('report')} />
-          </nav>
-        </div>
-        <div className="mt-auto p-6">
-          <div className="flex items-center gap-3 p-3 bg-slate-800 rounded-2xl border border-slate-700">
-            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center font-bold text-[10px]">ID</div>
-            <div className="truncate">
-              <p className="text-[10px] font-bold truncate text-white">{user?.uid || 'Guest'}</p>
-              <p className="text-[9px] text-emerald-500 font-bold uppercase tracking-widest">Sistem Online</p>
-            </div>
-          </div>
-        </div>
-      </aside>
+            pengajuanData.forEach(entry => {
+                const [y, m] = entry.tanggal.split('-');
+                if((fM && m !== fM) || (fY && y !== fY)) return;
 
-      {/* Main */}
-      <main className="flex-1 overflow-y-auto p-8">
-        <div className="max-w-6xl mx-auto">
-          {activeTab === 'dashboard' && (
-            <div className="space-y-8">
-              <header><h2 className="text-3xl font-black">Dashboard</h2></header>
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <StatCard label="Menunggu" value={stats.Pending} icon={Clock} color="bg-amber-500/10" text="text-amber-500" />
-                <StatCard label="Proses" value={stats.Proses} icon={RotateCw} color="bg-blue-500/10" text="text-blue-500" />
-                <StatCard label="Selesai" value={stats.Selesai} icon={CheckCircle} color="bg-emerald-500/10" text="text-emerald-500" />
-                <StatCard label="Ditolak" value={stats.Ditolak} icon={XCircle} color="bg-rose-500/10" text="text-rose-500" />
-                <StatCard label="Batal" value={stats.Cancel} icon={AlertCircle} color="bg-slate-500/10" text="text-slate-500" />
-              </div>
-            </div>
-          )}
+                entry.items.forEach(item => {
+                    const isEditing = editingItemId === item.id;
+                    const statusClass = statusStyleMap[item.status] || '';
 
-          {activeTab === 'input' && (
-            <div className="space-y-8">
-              <header><h2 className="text-3xl font-black">Input Pengajuan</h2></header>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-2 gap-6 bg-[#1e293b] p-6 rounded-3xl">
-                  <FormInput label="Kategori" type="select" value={formData.kategori} onChange={(v) => setFormData({...formData, kategori: v})} options={['Nota Dinas', 'Formulir']} />
-                  <FormInput label="Tanggal" type="date" value={formData.tanggal} onChange={(v) => setFormData({...formData, tanggal: v})} />
-                  <FormInput label="Pemohon" type="text" value={formData.namaPemohon} onChange={(v) => setFormData({...formData, namaPemohon: v})} placeholder="Nama Lengkap" />
-                  <FormInput label="Unit" type="text" value={formData.unitKerja} onChange={(v) => setFormData({...formData, unitKerja: v})} placeholder="Unit Kerja" />
-                </div>
-                <div className="bg-[#1e293b] p-6 rounded-3xl space-y-4">
-                  <div className="flex justify-between items-center"><h3 className="font-bold">Daftar Barang</h3><button type="button" onClick={handleAddItem} className="bg-blue-600 p-2 rounded-lg"><Plus size={18}/></button></div>
-                  {formData.items.map(item => (
-                    <div key={item.id} className="grid grid-cols-4 gap-4 p-4 bg-slate-800 rounded-2xl">
-                      <input className="bg-transparent border-b border-slate-700 outline-none p-1 text-sm" placeholder="Nama Barang" value={item.nama} onChange={e => handleItemChange(item.id, 'nama', e.target.value)} />
-                      <input className="bg-transparent border-b border-slate-700 outline-none p-1 text-sm" placeholder="Spesifikasi" value={item.spek} onChange={e => handleItemChange(item.id, 'spek', e.target.value)} />
-                      <input className="bg-transparent border-b border-slate-700 outline-none p-1 text-sm" type="number" placeholder="Qty" value={item.jumlah} onChange={e => handleItemChange(item.id, 'jumlah', e.target.value)} />
-                      <div className="flex items-center gap-2">
-                        <input className="flex-1 bg-transparent border-b border-slate-700 outline-none p-1 text-sm" placeholder="Alasan" value={item.alasan} onChange={e => handleItemChange(item.id, 'alasan', e.target.value)} />
-                        <button type="button" onClick={() => handleRemoveItem(item.id)} className="text-rose-500"><Trash2 size={16}/></button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-end"><button type="submit" className="bg-emerald-600 px-8 py-3 rounded-xl font-bold">Kirim</button></div>
-              </form>
-            </div>
-          )}
-
-          {activeTab === 'database' && (
-            <div className="space-y-8">
-              <div className="flex justify-between items-end">
-                <h2 className="text-3xl font-black">Database</h2>
-                <select className="bg-[#1e293b] p-2 rounded-xl text-xs border border-slate-700 outline-none" value={filterKategori} onChange={e => setFilterKategori(e.target.value)}>
-                  <option value="Semua">Semua Kategori</option>
-                  <option value="Nota Dinas">Nota Dinas</option>
-                  <option value="Formulir">Formulir</option>
-                </select>
-              </div>
-              <div className="bg-[#1e293b] rounded-3xl overflow-hidden border border-slate-800">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-800/50 text-[10px] uppercase font-black text-slate-500 tracking-widest">
-                    <tr><th className="p-6">Referensi</th><th className="p-6">Pemohon</th><th className="p-6">Items & Status</th><th className="p-6">Aksi</th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {filteredData.map(sub => (
-                      <tr key={sub.id}>
-                        <td className="p-6 align-top"><p className="text-blue-400 font-mono text-xs font-bold">{sub.kodeUnik}</p><p className="text-[10px] text-slate-500">{sub.tanggal}</p></td>
-                        <td className="p-6 align-top"><p className="font-bold text-sm">{sub.namaPemohon}</p><p className="text-[10px] text-slate-500">{sub.unitKerja}</p></td>
-                        <td className="p-6">
-                          <div className="space-y-2">
-                            {sub.items.map(item => (
-                              <div key={item.id} className="p-3 bg-slate-900/50 rounded-xl border border-slate-800 flex items-center justify-between gap-4">
-                                <div className="text-[11px]"><span className="font-black text-slate-200">{item.nama}</span> <span className="text-slate-500 ml-1">({item.jumlah} Unit)</span></div>
-                                <div className="flex items-center gap-2">
-                                  <StatusBadge status={item.status} />
-                                  <select className="bg-slate-800 text-[9px] p-1 rounded outline-none" value={item.status} onChange={async (e) => {
-                                    const updated = sub.items.map(i => i.id === item.id ? {...i, status: e.target.value} : i);
-                                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', sub.id), { items: updated });
-                                  }}>
-                                    {['Pending','Proses','Selesai','Ditolak','Cancel'].map(s => <option key={s} value={s}>{s}</option>)}
-                                  </select>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                    const tr = document.createElement('tr');
+                    tr.id = `row-${item.id}`;
+                    tr.className = `hover:bg-slate-800/20 ${isEditing ? 'bg-blue-900/10' : ''}`;
+                    tr.innerHTML = `
+                        <td class="p-4 align-top">
+                            <div class="text-slate-200 font-bold">${entry.tanggal}</div>
+                            <div class="text-blue-500 font-mono text-[9px] font-bold">${entry.kode}</div>
                         </td>
-                        <td className="p-6 text-center"><button onClick={async () => await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', sub.id))} className="text-slate-600 hover:text-rose-500"><Trash2 size={16}/></button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+                        <td class="p-4 align-top">
+                            <div class="font-semibold text-slate-300">${entry.pemohon}</div>
+                            <div class="text-slate-500 text-[9px] uppercase font-bold">${entry.unit}</div>
+                        </td>
+                        <td class="p-4 align-top">
+                            ${isEditing ? `
+                                <div class="space-y-1">
+                                    <input type="text" class="input-field !py-1 edit-nama" value="${item.nama}">
+                                    <input type="text" class="input-field !py-1 edit-spek" value="${item.spek}">
+                                    <div class="flex gap-1">
+                                        <input type="number" class="input-field !py-1 w-16 edit-jumlah" value="${item.jumlah}">
+                                        <input type="text" class="input-field !py-1 flex-1 edit-alasan" value="${item.alasan}">
+                                    </div>
+                                </div>
+                            ` : `
+                                <div class="text-slate-200 font-medium">${item.nama}</div>
+                                <div class="text-slate-500 text-[9px]">${item.spek || '-'} | <span class="text-blue-400">Qty: ${item.jumlah}</span></div>
+                                <div class="text-[9px] text-slate-400 mt-0.5 italic">${item.alasan || '-'}</div>
+                            `}
+                        </td>
+                        <td class="p-4 align-top">
+                            <select class="input-field !py-1 !text-[10px] ${statusClass} font-bold cursor-pointer status-selector">
+                                <option value="Pending" ${item.status==='Pending'?'selected':''}>Pending</option>
+                                <option value="Proses" ${item.status==='Proses'?'selected':''}>Proses</option>
+                                <option value="Done" ${item.status==='Done'?'selected':''}>Selesai</option>
+                                <option value="Cancel" ${item.status==='Cancel'?'selected':''}>Cancel</option>
+                                <option value="Ditolak" ${item.status==='Ditolak'?'selected':''}>Ditolak</option>
+                            </select>
+                        </td>
+                        <td class="p-4 align-top">
+                            <input type="text" value="${item.keterangan || ''}" class="input-field ket-input !py-1 !bg-transparent border-dashed border-slate-700" placeholder="...">
+                        </td>
+                        <td class="p-4 align-top text-center">
+                            ${isEditing ? `
+                                <button class="btn-save-edit text-emerald-500 p-1"><i class="fas fa-check"></i></button>
+                                <button class="btn-cancel-edit text-red-500 p-1"><i class="fas fa-times"></i></button>
+                            ` : `
+                                <button class="btn-toggle-edit text-slate-500 hover:text-blue-400 p-1 transition"><i class="fas fa-pencil-alt"></i></button>
+                            `}
+                        </td>
+                    `;
 
-          {activeTab === 'report' && (
-             <div className="space-y-8">
-              <header className="flex items-center justify-between"><h2 className="text-3xl font-black">Analisa</h2><div className="bg-[#1e293b] p-3 rounded-2xl"><select className="bg-transparent text-sm font-black outline-none" value={reportYear} onChange={e => setReportYear(e.target.value)}>{[2024, 2025, 2026].map(y => <option key={y} value={y} className="bg-[#1e293b]">{y}</option>)}</select></div></header>
-              <div className="grid grid-cols-3 gap-6">
-                <div className="bg-[#1e293b] p-10 rounded-3xl flex flex-col items-center justify-center border border-slate-800 shadow-xl"><p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">Total Diajukan</p><p className="text-6xl font-black">{yearlyStats.total}</p></div>
-                <div className="col-span-2 bg-[#1e293b] p-8 rounded-3xl border border-slate-800 flex items-end justify-between h-64 gap-6 px-12">
-                   <ChartBar label="Selesai" val={yearlyStats.percentages.Selesai} color="bg-emerald-500" />
-                   <ChartBar label="Proses" val={yearlyStats.percentages.Proses} color="bg-blue-500" />
-                   <ChartBar label="Pending" val={yearlyStats.percentages.Pending} color="bg-amber-500" />
-                   <ChartBar label="Ditolak" val={yearlyStats.percentages.Ditolak} color="bg-rose-500" />
-                   <ChartBar label="Batal" val={yearlyStats.percentages.Cancel} color="bg-slate-500" />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
-  );
-};
+                    // Bind events
+                    tr.querySelector('.status-selector').onchange = (e) => updateItemStatus(entry.dbId, item.id, e.target.value);
+                    tr.querySelector('.ket-input').onblur = (e) => updateItemKet(entry.dbId, item.id, e.target.value);
+                    if(isEditing) {
+                        tr.querySelector('.btn-save-edit').onclick = () => saveItemEdit(entry.dbId, item.id);
+                        tr.querySelector('.btn-cancel-edit').onclick = () => toggleEditItem(item.id);
+                    } else {
+                        tr.querySelector('.btn-toggle-edit').onclick = () => toggleEditItem(item.id);
+                    }
 
-// --- SUB-KOMPONEN ---
-const SidebarItem = ({ icon: Icon, label, active, onClick }) => (
-  <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all ${active ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
-    <Icon size={18} />
-    <span className="font-bold text-sm">{label}</span>
-  </button>
-);
+                    body.appendChild(tr);
+                });
+            });
+        }
 
-const StatCard = ({ label, value, icon: Icon, color, text }) => (
-  <div className="p-5 bg-[#1e293b] rounded-3xl border border-slate-800 flex items-center gap-4">
-    <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center shrink-0`}>
-      <Icon size={20} className={text} />
-    </div>
-    <div><p className="text-xl font-black">{value}</p><p className="text-[10px] font-black text-slate-500 uppercase">{label}</p></div>
-  </div>
-);
+        async function updateItemStatus(dbId, itemId, newStatus) {
+            if(!user) return;
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'nota-pengajuan', dbId);
+            const entry = pengajuanData.find(e => e.dbId === dbId);
+            const updatedItems = entry.items.map(i => i.id === itemId ? {...i, status: newStatus} : i);
+            
+            try {
+                await updateDoc(docRef, { items: updatedItems });
+            } catch (err) { console.error("Update status failed:", err); }
+        }
 
-const FormInput = ({ label, type, value, onChange, placeholder, options }) => (
-  <div className="flex flex-col gap-1.5"><label className="text-[10px] font-black text-slate-500 uppercase ml-1">{label}</label>
-    {type === 'select' ? (
-      <select className="bg-slate-800 border border-slate-700 p-3 rounded-xl outline-none text-sm" value={value} onChange={e => onChange(e.target.value)}>{options.map(o => <option key={o} value={o}>{o}</option>)}</select>
-    ) : (
-      <input type={type} className="bg-slate-800 border border-slate-700 p-3 rounded-xl outline-none text-sm" placeholder={placeholder} value={value} onChange={e => onChange(e.target.value)} />
-    )}
-  </div>
-);
+        async function updateItemKet(dbId, itemId, newKet) {
+            if(!user) return;
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'nota-pengajuan', dbId);
+            const entry = pengajuanData.find(e => e.dbId === dbId);
+            const updatedItems = entry.items.map(i => i.id === itemId ? {...i, keterangan: newKet} : i);
+            
+            try {
+                await updateDoc(docRef, { items: updatedItems });
+            } catch (err) { console.error("Update ket failed:", err); }
+        }
 
-const StatusBadge = ({ status }) => {
-  const styles = {
-    Selesai: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
-    Proses: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-    Pending: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
-    Ditolak: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
-    Cancel: 'bg-slate-500/10 text-slate-500 border-slate-500/20'
-  };
-  return <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border uppercase ${styles[status]}`}>{status}</span>;
-};
+        function toggleEditItem(itemId) {
+            editingItemId = (editingItemId === itemId) ? null : itemId;
+            renderDatabase();
+        }
 
-const ChartBar = ({ label, val, color }) => (
-  <div className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
-    <div className="text-[10px] font-bold text-slate-400">{val}%</div>
-    <div className={`w-full ${color} rounded-t-lg transition-all duration-700`} style={{ height: `${Math.max(val, 5)}%` }}></div>
-    <span className="text-[8px] font-black uppercase text-slate-500 whitespace-nowrap">{label}</span>
-  </div>
-);
+        async function saveItemEdit(dbId, itemId) {
+            if(!user) return;
+            const row = document.getElementById(`row-${itemId}`);
+            const entry = pengajuanData.find(e => e.dbId === dbId);
+            
+            const updatedItems = entry.items.map(i => {
+                if(i.id === itemId) {
+                    return {
+                        ...i,
+                        nama: row.querySelector('.edit-nama').value,
+                        spek: row.querySelector('.edit-spek').value,
+                        jumlah: row.querySelector('.edit-jumlah').value,
+                        alasan: row.querySelector('.edit-alasan').value
+                    };
+                }
+                return i;
+            });
 
-export default App;
+            try {
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'nota-pengajuan', dbId), { items: updatedItems });
+                editingItemId = null;
+                renderDatabase();
+            } catch (err) { console.error("Save edit failed:", err); }
+        }
+
+        // Stats & Reporting
+        window.renderReportBulanan = () => {
+            const body = document.getElementById('rptBulananBody');
+            const statsGrid = document.getElementById('rptStatsGrid');
+            const rKat = document.getElementById('rptKategori').value;
+            const rBul = document.getElementById('rptBulan').value;
+            const rTah = document.getElementById('rptTahun').value;
+            
+            const months = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"];
+            const headerInfo = document.getElementById('rptHeaderInfo');
+            if(headerInfo) headerInfo.innerText = `PERIODE: ${months[parseInt(rBul)-1]} ${rTah} | KATEGORI: ${rKat || 'SEMUA'}`;
+
+            body.innerHTML = '';
+            let stats = { Pending: 0, Proses: 0, Done: 0, Ditolak: 0, Cancel: 0 };
+            let found = false;
+
+            pengajuanData.forEach(entry => {
+                const [y, m] = entry.tanggal.split('-');
+                if(y !== rTah || m !== rBul) return;
+                if(rKat && entry.kategori !== rKat) return;
+
+                entry.items.forEach(item => {
+                    found = true;
+                    stats[item.status]++;
+                    const badgeClass = statusStyleMap[item.status] || '';
+                    
+                    body.innerHTML += `
+                        <tr class="hover:bg-slate-800/30">
+                            <td class="p-2 align-top">
+                                <div class="font-bold text-slate-200">${entry.tanggal}</div>
+                                <div class="text-[8px] font-mono text-blue-500">${entry.kode}</div>
+                            </td>
+                            <td class="p-2 align-top">
+                                <div class="font-bold text-slate-300">${entry.pemohon}</div>
+                                <div class="text-[8px] text-slate-500 uppercase">${entry.unit}</div>
+                            </td>
+                            <td class="p-2 align-top text-slate-200">${item.nama}</td>
+                            <td class="p-2 align-top text-slate-400">${item.spek || '-'}</td>
+                            <td class="p-2 align-top text-center text-blue-400 font-bold">${item.jumlah}</td>
+                            <td class="p-2 align-top text-slate-400 italic">${item.alasan || '-'}</td>
+                            <td class="p-2 align-top">
+                                <span class="status-badge-base ${badgeClass}">${item.status === 'Done' ? 'Selesai' : item.status}</span>
+                            </td>
+                            <td class="p-2 align-top text-slate-500 italic">${item.keterangan || '-'}</td>
+                        </tr>
+                    `;
+                });
+            });
+
+            if(!found) {
+                body.innerHTML = '<tr><td colspan="8" class="p-8 text-center text-slate-500 italic">Data tidak ditemukan untuk periode ini.</td></tr>';
+            }
+
+            statsGrid.innerHTML = `
+                <div class="glass-card p-3 border-l-2 border-emerald-500"><p class="text-[8px] text-slate-500 uppercase font-bold">Selesai</p><p class="text-lg font-bold text-emerald-500">${stats.Done}</p></div>
+                <div class="glass-card p-3 border-l-2 border-blue-500"><p class="text-[8px] text-slate-500 uppercase font-bold">Proses</p><p class="text-lg font-bold text-blue-500">${stats.Proses}</p></div>
+                <div class="glass-card p-3 border-l-2 border-yellow-500"><p class="text-[8px] text-slate-500 uppercase font-bold">Pending</p><p class="text-lg font-bold text-yellow-500">${stats.Pending}</p></div>
+                <div class="glass-card p-3 border-l-2 border-red-500"><p class="text-[8px] text-slate-500 uppercase font-bold">Ditolak</p><p class="text-lg font-bold text-red-500">${stats.Ditolak}</p></div>
+                <div class="glass-card p-3 border-l-2 border-slate-500"><p class="text-[8px] text-slate-500 uppercase font-bold">Cancel</p><p class="text-lg font-bold text-slate-400">${stats.Cancel}</p></div>
+            `;
+        };
+
+        window.renderLaporan = () => {
+            const fY = document.getElementById('filterTahun').value;
+            let total = 0, counts = { Done: 0, Proses: 0, Pending: 0, Cancel: 0, Ditolak: 0 };
+            
+            pengajuanData.forEach(e => {
+                if(e.tanggal.split('-')[0] === fY) {
+                    e.items.forEach(i => { total++; counts[i.status]++; });
+                }
+            });
+            
+            const grid = document.getElementById('yearly-stat-grid');
+            if(!grid) return;
+            
+            grid.innerHTML = '<h4 class="font-bold text-blue-400 text-[10px] uppercase tracking-widest mb-6">Efektivitas Tahun ' + fY + '</h4>';
+            
+            if(total === 0) { grid.innerHTML += '<p class="text-slate-500 italic text-xs">Belum ada data di tahun ini.</p>'; return; }
+
+            const config = [
+                { k: 'Done', l: 'Selesai', bg: 'bg-emerald-500' },
+                { k: 'Proses', l: 'Proses', bg: 'bg-blue-500' },
+                { k: 'Pending', l: 'Pending', bg: 'bg-yellow-500' },
+                { k: 'Cancel', l: 'Cancel', bg: 'bg-slate-500' }
+            ];
+
+            config.forEach(item => {
+                const p = ((counts[item.k]/total)*100).toFixed(1);
+                grid.innerHTML += `
+                    <div class="mb-4">
+                        <div class="flex justify-between text-[10px] mb-1">
+                            <span class="text-slate-400 uppercase font-bold">${item.l}</span>
+                            <span class="text-white font-bold">${p}%</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                            <div class="${item.bg} h-full" style="width: ${p}%"></div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            const donePct = ((counts.Done/total)*100).toFixed(0);
+            const pctEl = document.getElementById('overall-percent');
+            const progressEl = document.getElementById('overall-progress');
+            if(pctEl) pctEl.innerText = donePct + '%';
+            if(progressEl) progressEl.style.strokeDashoffset = 534 - (534 * donePct / 100);
+        };
+
+        window.exportReportPDF = async () => {
+            const { jsPDF } = window.jspdf;
+            const docPdf = new jsPDF('l', 'mm', 'a4');
+            const rBul = document.getElementById('rptBulan').value;
+            const rTah = document.getElementById('rptTahun').value;
+            const rKat = document.getElementById('rptKategori').value || 'Semua';
+
+            docPdf.setFontSize(14);
+            docPdf.text(`LAPORAN DETAIL REKAPITULASI BARANG (${rKat})`, 14, 15);
+            docPdf.setFontSize(10);
+            docPdf.text(`Periode: ${rBul}-${rTah}`, 14, 22);
+            
+            const rows = [];
+            pengajuanData.forEach(entry => {
+                const [y, m] = entry.tanggal.split('-');
+                if(y === rTah && m === rBul && (!rKat || rKat === 'Semua' || entry.kategori === rKat)) {
+                    entry.items.forEach(i => {
+                        rows.push([
+                            `${entry.tanggal}\n${entry.kode}`, 
+                            `${entry.pemohon}\n(${entry.unit})`, 
+                            i.nama, 
+                            i.spek || '-', 
+                            i.jumlah, 
+                            i.alasan || '-', 
+                            i.status, 
+                            i.keterangan || '-'
+                        ]);
+                    });
+                }
+            });
+            
+            docPdf.autoTable({
+                startY: 28,
+                head: [['Tgl / Tiket', 'Pemohon / Unit', 'Nama Barang', 'Spesifikasi', 'Qty', 'Alasan', 'Status', 'Ket']],
+                body: rows,
+                styles: { fontSize: 7, cellPadding: 2 },
+                headStyles: { fillColor: [15, 23, 42], textColor: 255 },
+                columnStyles: {
+                    0: { cellWidth: 25 },
+                    1: { cellWidth: 35 },
+                    4: { halign: 'center', cellWidth: 10 }
+                }
+            });
+            docPdf.save(`Laporan_Cloud_${rBul}_${rTah}.pdf`);
+        };
+
+        // Init Page Selects
+        const currentYear = new Date().getFullYear();
+        ['filterTahun', 'rptTahun'].forEach(id => {
+            const select = document.getElementById(id);
+            if(!select) return;
+            for(let y=2024; y<=2030; y++) {
+                const opt = new Option(y, y);
+                if(y === currentYear) opt.selected = true;
+                select.add(opt);
+            }
+        });
+
+        document.getElementById('filterBulan').onchange = renderDatabase;
+        document.getElementById('filterTahun').onchange = () => { renderDatabase(); renderLaporan(); };
+        document.getElementById('inputTanggal').valueAsDate = new Date();
+
+    </script>
+</body>
+</html>
