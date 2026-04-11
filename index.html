@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>E-NOTA PRO | RSU Dadi Keluarga</title>
+    <title>E-NOTA PRO | RSU Dadi Keluarga Purwokerto</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
@@ -13,109 +13,131 @@
         
         <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
             <div class="p-6">
-                <h1 class="text-xl font-bold text-blue-500">E-NOTA <span class="text-white">PRO</span></h1>
-                <p class="text-[10px] text-slate-500 uppercase tracking-widest">RSU Dadi Keluarga</p>
+                <h1 class="text-xl font-bold text-blue-500 italic">E-NOTA <span class="text-white">PRO</span></h1>
+                <p class="text-[10px] text-slate-500 uppercase tracking-widest">Bag. Rumah Tangga</p>
             </div>
             
-            <nav class="flex-1 px-4 space-y-2">
-                <button onclick="switchTab('dashboard')" id="nav-dashboard" class="w-full flex items-center p-3 rounded-lg hover:bg-slate-800 transition active">
-                    <i class="fas fa-chart-line mr-3"></i> Dashboard
+            <nav class="flex-1 px-4 space-y-1 overflow-y-auto">
+                <div class="text-[10px] text-slate-600 font-bold px-3 mt-4 mb-2 uppercase">Utama</div>
+                <button onclick="switchTab('dashboard')" id="nav-dashboard" class="w-full flex items-center p-3 rounded-lg hover:bg-slate-800 transition active text-sm">
+                    <i class="fas fa-chart-pie mr-3 w-5"></i> Dashboard
                 </button>
-                <button onclick="switchTab('input')" id="nav-input" class="w-full flex items-center p-3 rounded-lg hover:bg-slate-800 transition">
-                    <i class="fas fa-edit mr-3"></i> Buat Pengajuan
+                
+                <div class="text-[10px] text-slate-600 font-bold px-3 mt-4 mb-2 uppercase">Administrasi</div>
+                <button onclick="switchTab('input')" id="nav-input" class="w-full flex items-center p-3 rounded-lg hover:bg-slate-800 transition text-sm">
+                    <i class="fas fa-file-signature mr-3 w-5"></i> Buat Pengajuan
                 </button>
-                <button onclick="switchTab('database')" id="nav-database" class="w-full flex items-center p-3 rounded-lg hover:bg-slate-800 transition">
-                    <i class="fas fa-database mr-3"></i> Database
+                <button onclick="switchTab('database')" id="nav-database" class="w-full flex items-center p-3 rounded-lg hover:bg-slate-800 transition text-sm">
+                    <i class="fas fa-server mr-3 w-5"></i> Database Nota
+                </button>
+
+                <div class="text-[10px] text-slate-600 font-bold px-3 mt-4 mb-2 uppercase">Fasilitas & Aset</div>
+                <button onclick="switchTab('sarpras')" id="nav-sarpras" class="w-full flex items-center p-3 rounded-lg hover:bg-slate-800 transition text-sm">
+                    <i class="fas fa-tools mr-3 w-5"></i> Monitoring Sarpras
+                </button>
+                <button onclick="switchTab('aset')" id="nav-aset" class="w-full flex items-center p-3 rounded-lg hover:bg-slate-800 transition text-sm">
+                    <i class="fas fa-boxes mr-3 w-5"></i> SIM-ASET
+                </button>
+
+                <div class="text-[10px] text-slate-600 font-bold px-3 mt-4 mb-2 uppercase">Keuangan</div>
+                <button onclick="switchTab('finance')" id="nav-finance" class="w-full flex items-center p-3 rounded-lg hover:bg-slate-800 transition text-sm">
+                    <i class="fas fa-wallet mr-3 w-5"></i> MediFinance
                 </button>
             </nav>
 
             <div class="p-4 border-t border-slate-800 text-[10px] text-slate-600">
-                <p>User ID: <span id="user-display" class="text-blue-400">Loading...</span></p>
-                <p>&copy; 2026 Admin System | <span class="font-mono">TOMOSJR</span></p>
+                <p>User ID: <span id="user-display" class="text-blue-400 font-mono">Loading...</span></p>
+                <p>&copy; 2026 <span class="text-slate-400 font-bold">TOMOSJR</span></p>
             </div>
         </aside>
 
-        <main class="flex-1 overflow-y-auto p-8">
+        <main class="flex-1 overflow-y-auto p-8 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 to-slate-950">
             
             <section id="tab-dashboard" class="tab-content">
-                <h2 class="text-2xl font-bold mb-6">Ringkasan Aktivitas</h2>
-                <div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold">Ringkasan Operasional</h2>
+                    <div class="text-xs text-slate-500">RSU Dadi Keluarga Purwokerto</div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                    <div class="bg-slate-900/50 border border-slate-800 p-4 rounded-xl">
+                        <p class="text-slate-500 text-xs uppercase">Total Nota</p>
+                        <h3 id="stat-total" class="text-2xl font-bold text-blue-500">0</h3>
+                    </div>
+                    <div class="bg-slate-900/50 border border-slate-800 p-4 rounded-xl">
+                        <p class="text-slate-500 text-xs uppercase">Sarpras Feasibility</p>
+                        <h3 class="text-2xl font-bold text-emerald-500">-- %</h3>
+                    </div>
+                    <div class="bg-slate-900/50 border border-slate-800 p-4 rounded-xl">
+                        <p class="text-slate-500 text-xs uppercase">Finance Month</p>
+                        <h3 class="text-2xl font-bold text-amber-500">Active</h3>
+                    </div>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
                     <table class="w-full text-left">
-                        <thead class="bg-slate-800/50 text-slate-400 text-xs uppercase">
+                        <thead class="bg-slate-800/50 text-slate-400 text-[10px] uppercase">
                             <tr>
-                                <th class="p-4">Kode</th>
+                                <th class="p-4">Tiket</th>
+                                <th class="p-4">Unit</th>
                                 <th class="p-4">Pemohon</th>
-                                <th class="p-4">Kategori</th>
                                 <th class="p-4">Tanggal</th>
-                                <th class="p-4">Status</th>
                             </tr>
                         </thead>
-                        <tbody id="recent-activity-body">
-                            </tbody>
+                        <tbody id="recent-activity-body" class="text-sm"></tbody>
                     </table>
                 </div>
             </section>
 
             <section id="tab-input" class="tab-content hidden">
-                <h2 class="text-2xl font-bold mb-6">Form Pengajuan Barang</h2>
+                <h2 class="text-2xl font-bold mb-6">Buat Pengajuan Baru</h2>
                 <form id="formPengajuan" class="max-w-4xl bg-slate-900 p-6 rounded-xl border border-slate-800 space-y-4">
                     <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs text-slate-500 mb-1">Kategori</label>
-                            <select id="inputKategori" class="w-full bg-slate-800 border border-slate-700 p-2 rounded">
-                                <option>Nota Dinas</option>
-                                <option>Form Permintaan</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-xs text-slate-500 mb-1">Tanggal</label>
-                            <input type="date" id="inputTanggal" class="w-full bg-slate-800 border border-slate-700 p-2 rounded" required>
-                        </div>
+                        <div><label class="text-xs text-slate-500">Kategori</label><select id="inputKategori" class="w-full bg-slate-800 border border-slate-700 p-2 rounded text-sm"><option>Nota Dinas</option><option>Form Permintaan</option></select></div>
+                        <div><label class="text-xs text-slate-500">Tanggal</label><input type="date" id="inputTanggal" class="w-full bg-slate-800 border border-slate-700 p-2 rounded text-sm" required></div>
                     </div>
                     <div class="grid grid-cols-2 gap-4">
-                        <input type="text" id="inputPemohon" placeholder="Nama Pemohon" class="w-full bg-slate-800 border border-slate-700 p-2 rounded" required>
-                        <input type="text" id="inputUnit" placeholder="Unit/Bagian" class="w-full bg-slate-800 border border-slate-700 p-2 rounded" required>
+                        <input type="text" id="inputPemohon" placeholder="Nama Pemohon" class="w-full bg-slate-800 border border-slate-700 p-2 rounded text-sm" required>
+                        <input type="text" id="inputUnit" placeholder="Unit/Bagian" class="w-full bg-slate-800 border border-slate-700 p-2 rounded text-sm" required>
                     </div>
-
-                    <table class="w-full mt-4">
-                        <thead>
-                            <tr class="text-left text-xs text-slate-500">
-                                <th>Nama Barang</th>
-                                <th>Spek</th>
-                                <th width="80">Qty</th>
-                                <th width="50"></th>
-                            </tr>
-                        </thead>
-                        <tbody id="barangBody">
-                            <tr>
-                                <td class="py-2 pr-2"><input type="text" class="w-full bg-slate-800 border border-slate-700 p-2 rounded item-nama" required></td>
-                                <td class="py-2 pr-2"><input type="text" class="w-full bg-slate-800 border border-slate-700 p-2 rounded item-spek"></td>
-                                <td class="py-2 pr-2"><input type="number" class="w-full bg-slate-800 border border-slate-700 p-2 rounded item-jumlah" required></td>
-                                <td class="py-2 text-center"><button type="button" onclick="removeRow(this)" class="text-red-500"><i class="fas fa-times"></i></button></td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    <button type="button" onclick="addRow()" class="text-xs text-blue-400 hover:text-blue-300">+ Tambah Baris</button>
-                    
-                    <div class="pt-4">
-                        <button type="submit" id="btn-submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition">
-                            SIMPAN PENGAJUAN
-                        </button>
-                    </div>
+                    <table class="w-full mt-4"><tbody id="barangBody"><tr>
+                        <td class="py-1 pr-2"><input type="text" placeholder="Nama Barang" class="w-full bg-slate-800 border border-slate-700 p-2 rounded text-sm item-nama" required></td>
+                        <td class="py-1 pr-2"><input type="number" placeholder="Qty" class="w-20 bg-slate-800 border border-slate-700 p-2 rounded text-sm item-jumlah" required></td>
+                        <td class="py-1 text-center"><button type="button" onclick="removeRow(this)" class="text-slate-600 hover:text-red-500"><i class="fas fa-trash"></i></button></td>
+                    </tr></tbody></table>
+                    <button type="button" onclick="addRow()" class="text-[10px] text-blue-500 uppercase">+ Tambah Barang</button>
+                    <button type="submit" id="btn-submit" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-lg font-bold mt-4">SIMPAN DATA</button>
                 </form>
+            </section>
+
+            <section id="tab-sarpras" class="tab-content hidden">
+                <h2 class="text-2xl font-bold mb-6 italic">Monitoring <span class="text-blue-500 text-sm">SARPRAS</span></h2>
+                <div class="bg-slate-900 p-8 rounded-2xl border border-dashed border-slate-800 text-center">
+                    <i class="fas fa-tools text-4xl text-slate-700 mb-4"></i>
+                    <p class="text-slate-500">Modul Monitoring Sarpras sedang disiapkan...</p>
+                </div>
+            </section>
+
+            <section id="tab-aset" class="tab-content hidden">
+                <h2 class="text-2xl font-bold mb-6 italic text-emerald-500">SIM-ASET</h2>
+                <div class="bg-slate-900 p-8 rounded-2xl border border-dashed border-slate-800 text-center">
+                    <i class="fas fa-boxes text-4xl text-slate-700 mb-4"></i>
+                    <p class="text-slate-500">Modul Inventaris Aset sedang disiapkan...</p>
+                </div>
+            </section>
+
+            <section id="tab-finance" class="tab-content hidden">
+                <h2 class="text-2xl font-bold mb-6 italic text-amber-500">MediFinance</h2>
+                <div class="bg-slate-900 p-8 rounded-2xl border border-dashed border-slate-800 text-center">
+                    <i class="fas fa-wallet text-4xl text-slate-700 mb-4"></i>
+                    <p class="text-slate-500">Modul Pelaporan Keuangan sedang disiapkan...</p>
+                </div>
             </section>
 
             <section id="tab-database" class="tab-content hidden">
                 <h2 class="text-2xl font-bold mb-6">Database Pengajuan</h2>
-                <div id="databaseBody" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    </div>
+                <div id="databaseBody" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
             </section>
 
         </main>
-    </div>
-
-    <div id="sync-indicator" class="fixed bottom-5 right-5 px-3 py-1.5 rounded-full text-[10px] font-bold z-50 border bg-slate-900 text-slate-500 border-slate-700">
-        Initializing...
     </div>
 
     <script type="module">
@@ -132,27 +154,17 @@
             appId: "1:96523383307:web:9a0bc43bd7f6375e050d0e"
         };
 
-        // URUTAN YANG BENAR (Fix ReferenceError)
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        
         let pengajuanData = [];
 
-        // UI Handler
-        const updateSyncIndicator = (status, colorClass) => {
-            const el = document.getElementById('sync-indicator');
-            el.innerHTML = `<i class="fas fa-circle mr-2"></i> ${status}`;
-            el.className = `fixed bottom-5 right-5 px-3 py-1.5 rounded-full text-[10px] font-bold z-50 border ${colorClass}`;
-        };
-
-        // Login & Sync
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 document.getElementById('user-display').innerText = user.uid.substring(0, 8);
                 setupRealtimeSync();
             } else {
-                signInAnonymously(auth).catch(console.error);
+                signInAnonymously(auth);
             }
         });
 
@@ -160,22 +172,25 @@
             const q = query(collection(db, 'nota-pengajuan'), orderBy('timestamp', 'desc'));
             onSnapshot(q, (snapshot) => {
                 pengajuanData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                document.getElementById('stat-total').innerText = pengajuanData.length;
                 renderDashboard();
                 renderDatabase();
-                updateSyncIndicator("Connected", "bg-emerald-900/20 text-emerald-500 border-emerald-500/50");
-            }, (err) => {
-                updateSyncIndicator("Error: " + err.code, "bg-red-900/20 text-red-500 border-red-500/50");
             });
         }
 
-        // Global Functions (ditempel ke window agar bisa dipanggil HTML)
+        window.switchTab = (id) => {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+            document.getElementById(`tab-${id}`).classList.remove('hidden');
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('bg-slate-800', 'text-blue-400', 'border-l-4', 'border-blue-500'));
+            document.getElementById(`nav-${id}`).classList.add('bg-slate-800', 'text-blue-400', 'border-l-4', 'border-blue-500');
+        };
+
         window.addRow = () => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td class="py-2 pr-2"><input type="text" class="w-full bg-slate-800 border border-slate-700 p-2 rounded item-nama" required></td>
-                <td class="py-2 pr-2"><input type="text" class="w-full bg-slate-800 border border-slate-700 p-2 rounded item-spek"></td>
-                <td class="py-2 pr-2"><input type="number" class="w-full bg-slate-800 border border-slate-700 p-2 rounded item-jumlah" required></td>
-                <td class="py-2 text-center"><button type="button" onclick="removeRow(this)" class="text-red-500"><i class="fas fa-times"></i></button></td>`;
+                <td class="py-1 pr-2"><input type="text" placeholder="Nama Barang" class="w-full bg-slate-800 border border-slate-700 p-2 rounded text-sm item-nama" required></td>
+                <td class="py-1 pr-2"><input type="number" placeholder="Qty" class="w-20 bg-slate-800 border border-slate-700 p-2 rounded text-sm item-jumlah" required></td>
+                <td class="py-1 text-center"><button type="button" onclick="removeRow(this)" class="text-slate-600 hover:text-red-500"><i class="fas fa-trash"></i></button></td>`;
             document.getElementById('barangBody').appendChild(tr);
         };
 
@@ -183,51 +198,40 @@
             if(document.querySelectorAll('#barangBody tr').length > 1) btn.closest('tr').remove();
         };
 
-        window.switchTab = (id) => {
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
-            document.getElementById(`tab-${id}`).classList.remove('hidden');
-            document.querySelectorAll('nav button').forEach(b => b.classList.remove('bg-slate-800', 'text-blue-400'));
-            document.getElementById(`nav-${id}`).classList.add('bg-slate-800', 'text-blue-400');
-        };
-
         const renderDashboard = () => {
             const body = document.getElementById('recent-activity-body');
-            body.innerHTML = pengajuanData.slice(0, 5).map(r => `
-                <tr class="border-b border-slate-800/50">
-                    <td class="p-4 font-mono text-blue-400">${r.kode}</td>
-                    <td class="p-4">${r.pemohon}</td>
-                    <td class="p-4 text-slate-500 text-xs">${r.kategori}</td>
-                    <td class="p-4 text-slate-500 text-xs">${r.tanggal}</td>
-                    <td class="p-4"><span class="px-2 py-1 bg-blue-900/30 text-blue-400 text-[10px] rounded">Proses</span></td>
+            body.innerHTML = pengajuanData.slice(0, 8).map(r => `
+                <tr class="border-b border-slate-800/50 hover:bg-slate-800/20">
+                    <td class="p-4 font-mono text-blue-400 text-xs">${r.kode}</td>
+                    <td class="p-4 text-xs">${r.unit}</td>
+                    <td class="p-4 text-xs">${r.pemohon}</td>
+                    <td class="p-4 text-slate-500 text-[10px]">${r.tanggal}</td>
                 </tr>`).join('');
         };
 
         const renderDatabase = () => {
             const container = document.getElementById('databaseBody');
             container.innerHTML = pengajuanData.map(r => `
-                <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
+                <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 hover:border-blue-500/50 transition">
                     <div class="flex justify-between items-start mb-2">
-                        <span class="text-blue-400 font-bold font-mono">${r.kode}</span>
+                        <span class="text-blue-400 font-bold font-mono text-xs">${r.kode}</span>
                         <span class="text-[10px] text-slate-500">${r.tanggal}</span>
                     </div>
-                    <p class="text-sm font-bold">${r.pemohon}</p>
+                    <p class="text-sm font-bold uppercase">${r.pemohon}</p>
                     <p class="text-[10px] text-slate-500 mb-3">${r.unit}</p>
-                    <div class="border-t border-slate-800 pt-2">
-                        ${r.items.map(i => `<div class="text-[11px] flex justify-between"><span>${i.nama}</span><span>x${i.jumlah}</span></div>`).join('')}
+                    <div class="border-t border-slate-800 pt-2 space-y-1">
+                        ${r.items.map(i => `<div class="text-[11px] flex justify-between text-slate-400"><span>${i.nama}</span><span class="font-bold">x${i.jumlah}</span></div>`).join('')}
                     </div>
                 </div>`).join('');
         };
 
-        // Form Submit
         document.getElementById('formPengajuan').addEventListener('submit', async (e) => {
             e.preventDefault();
             const btn = document.getElementById('btn-submit');
-            btn.disabled = true;
-            btn.innerText = "MENYIMPAN...";
+            btn.disabled = true; btn.innerText = "PROSES...";
 
             const items = Array.from(document.querySelectorAll('#barangBody tr')).map(row => ({
                 nama: row.querySelector('.item-nama').value,
-                spek: row.querySelector('.item-spek').value,
                 jumlah: row.querySelector('.item-jumlah').value
             }));
 
@@ -242,16 +246,10 @@
                     items: items,
                     timestamp: Date.now()
                 });
-                alert("Data Berhasil Disimpan!");
                 e.target.reset();
                 switchTab('dashboard');
-            } catch (err) {
-                console.error(err);
-                alert("Gagal menyimpan!");
-            } finally {
-                btn.disabled = false;
-                btn.innerText = "SIMPAN PENGAJUAN";
-            }
+            } catch (err) { alert("Error!"); }
+            finally { btn.disabled = false; btn.innerText = "SIMPAN DATA"; }
         });
     </script>
 </body>
