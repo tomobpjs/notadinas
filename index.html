@@ -1,182 +1,258 @@
-<script type="module">
-    // 1. Impor semua fungsi yang dibutuhkan (SDK Modular v9+)
-    import { initializeApp } from "firebase/app";
-    import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
-    import { 
-        getFirestore, collection, addDoc, query, onSnapshot, doc, updateDoc 
-    } from "firebase/firestore";
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-NOTA PRO | RSU Dadi Keluarga</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-slate-950 text-slate-200 font-sans">
 
-    // Firebase Configuration
-    const firebaseConfig = {
-        apiKey: "AIzaSyAOAMNE1yBVB09dbO-4Rr-D7KPODU0-694",
-        authDomain: "notadinasrt.firebaseapp.com",
-        projectId: "notadinasrt",
-        storageBucket: "notadinasrt.firebasestorage.app",
-        messagingSenderId: "96523383307",
-        appId: "1:96523383307:web:9a0bc43bd7f6375e050d0e"
-    };
-
-    // 2. Inisialisasi Firebase & Variabel Global
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    
-    let pengajuanData = [];
-    let user = null;
-
-    // UI Helpers
-    const updateSyncIndicator = (status, colorClass) => {
-        const el = document.getElementById('sync-indicator');
-        if (el) {
-            el.innerHTML = `<i class="fas fa-cloud mr-2"></i> ${status}`;
-            el.className = `fixed bottom-5 right-5 px-3 py-1.5 rounded-full text-[10px] font-bold z-50 no-print border ${colorClass}`;
-        }
-    };
-
-    // 3. Fungsi Autentikasi
-    const initAuth = async () => {
-        try {
-            await signInAnonymously(auth);
-        } catch (err) {
-            console.error("Auth failed:", err);
-            updateSyncIndicator("Auth Error", "bg-red-900/20 text-red-500 border-red-500/50");
-        }
-    };
-
-    onAuthStateChanged(auth, (u) => {
-        user = u;
-        if (user) {
-            document.getElementById('user-display').innerText = user.uid.substring(0, 8);
-            setupRealtimeSync();
-        }
-    });
-
-    initAuth();
-
-    // 4. Sinkronisasi Data Real-time
-    function setupRealtimeSync() {
-        if (!user) return;
+    <div class="flex h-screen overflow-hidden">
         
-        // Menggunakan koleksi 'nota-pengajuan'
-        const q = query(collection(db, 'nota-pengajuan'));
-        updateSyncIndicator("Syncing...", "bg-blue-900/20 text-blue-500 border-blue-500/50");
-
-        onSnapshot(q, (snapshot) => {
-            pengajuanData = snapshot.docs.map(doc => ({ dbId: doc.id, ...doc.data() }));
-            pengajuanData.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
-            renderDashboard();
-            renderDatabase();
-            updateSyncIndicator("Connected", "bg-emerald-900/20 text-emerald-500 border-emerald-500/50");
-        }, (err) => {
-            console.error("Firestore error:", err);
-            updateSyncIndicator("Offline/Error", "bg-red-900/20 text-red-500 border-red-500/50");
-        });
-    }
-
-    // 5. Fungsi Penanganan Form (Submit)
-    document.getElementById('formPengajuan').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (!user) return alert("Koneksi belum siap.");
-
-        const btn = document.getElementById('btn-submit');
-        btn.disabled = true;
-        btn.innerText = "MENYIMPAN...";
-
-        const dateInput = document.getElementById('inputTanggal').value;
-        const kat = document.getElementById('inputKategori').value;
-        
-        // Generate Kode Tiket Sederhana
-        const kode = `${kat === "Nota Dinas" ? 'ND' : 'FORM'}-${Date.now().toString().slice(-4)}`;
-
-        const items = Array.from(document.querySelectorAll('#barangBody tr')).map(row => ({
-            id: Math.random().toString(36).substr(2, 9),
-            nama: row.querySelector('.item-nama').value,
-            spek: row.querySelector('.item-spek').value,
-            jumlah: row.querySelector('.item-jumlah').value,
-            alasan: row.querySelector('.item-alasan').value,
-            status: 'Pending'
-        }));
-
-        try {
-            await addDoc(collection(db, 'nota-pengajuan'), {
-                kode,
-                kategori: kat,
-                tanggal: dateInput,
-                pemohon: document.getElementById('inputPemohon').value,
-                unit: document.getElementById('inputUnit').value,
-                timestamp: Date.now(),
-                items: items
-            });
+        <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
+            <div class="p-6">
+                <h1 class="text-xl font-bold text-blue-500">E-NOTA <span class="text-white">PRO</span></h1>
+                <p class="text-[10px] text-slate-500 uppercase tracking-widest">RSU Dadi Keluarga</p>
+            </div>
             
-            e.target.reset();
-            alert("Berhasil disimpan!");
-            switchTab('dashboard');
-        } catch (err) {
-            console.error(err);
-            alert("Gagal menyimpan data.");
-        } finally {
-            btn.disabled = false;
-            btn.innerText = "SIMPAN PENGAJUAN";
-        }
-    });
+            <nav class="flex-1 px-4 space-y-2">
+                <button onclick="switchTab('dashboard')" id="nav-dashboard" class="w-full flex items-center p-3 rounded-lg hover:bg-slate-800 transition active">
+                    <i class="fas fa-chart-line mr-3"></i> Dashboard
+                </button>
+                <button onclick="switchTab('input')" id="nav-input" class="w-full flex items-center p-3 rounded-lg hover:bg-slate-800 transition">
+                    <i class="fas fa-edit mr-3"></i> Buat Pengajuan
+                </button>
+                <button onclick="switchTab('database')" id="nav-database" class="w-full flex items-center p-3 rounded-lg hover:bg-slate-800 transition">
+                    <i class="fas fa-database mr-3"></i> Database
+                </button>
+            </nav>
 
-    // 6. Fungsi Render UI
-    window.renderDashboard = () => {
-        const body = document.getElementById('recent-activity-body');
-        body.innerHTML = '';
-        pengajuanData.slice(0, 5).forEach(r => {
-            body.innerHTML += `
-                <tr class="hover:bg-slate-800/30 border-b border-slate-800/50">
-                    <td class="py-3 font-mono text-blue-400 font-bold">${r.kode}</td>
-                    <td class="py-3 text-slate-300">${r.pemohon}</td>
-                    <td class="py-3 text-slate-500">${r.kategori}</td>
-                    <td class="py-3 text-slate-500">${r.tanggal}</td>
-                    <td class="py-3"><span class="status-badge-base badge-done">Cloud</span></td>
-                </tr>`;
+            <div class="p-4 border-t border-slate-800 text-[10px] text-slate-600">
+                <p>User ID: <span id="user-display" class="text-blue-400">Loading...</span></p>
+                <p>&copy; 2026 Admin System | <span class="font-mono">TOMOSJR</span></p>
+            </div>
+        </aside>
+
+        <main class="flex-1 overflow-y-auto p-8">
+            
+            <section id="tab-dashboard" class="tab-content">
+                <h2 class="text-2xl font-bold mb-6">Ringkasan Aktivitas</h2>
+                <div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-800/50 text-slate-400 text-xs uppercase">
+                            <tr>
+                                <th class="p-4">Kode</th>
+                                <th class="p-4">Pemohon</th>
+                                <th class="p-4">Kategori</th>
+                                <th class="p-4">Tanggal</th>
+                                <th class="p-4">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-activity-body">
+                            </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="tab-input" class="tab-content hidden">
+                <h2 class="text-2xl font-bold mb-6">Form Pengajuan Barang</h2>
+                <form id="formPengajuan" class="max-w-4xl bg-slate-900 p-6 rounded-xl border border-slate-800 space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs text-slate-500 mb-1">Kategori</label>
+                            <select id="inputKategori" class="w-full bg-slate-800 border border-slate-700 p-2 rounded">
+                                <option>Nota Dinas</option>
+                                <option>Form Permintaan</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-500 mb-1">Tanggal</label>
+                            <input type="date" id="inputTanggal" class="w-full bg-slate-800 border border-slate-700 p-2 rounded" required>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <input type="text" id="inputPemohon" placeholder="Nama Pemohon" class="w-full bg-slate-800 border border-slate-700 p-2 rounded" required>
+                        <input type="text" id="inputUnit" placeholder="Unit/Bagian" class="w-full bg-slate-800 border border-slate-700 p-2 rounded" required>
+                    </div>
+
+                    <table class="w-full mt-4">
+                        <thead>
+                            <tr class="text-left text-xs text-slate-500">
+                                <th>Nama Barang</th>
+                                <th>Spek</th>
+                                <th width="80">Qty</th>
+                                <th width="50"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="barangBody">
+                            <tr>
+                                <td class="py-2 pr-2"><input type="text" class="w-full bg-slate-800 border border-slate-700 p-2 rounded item-nama" required></td>
+                                <td class="py-2 pr-2"><input type="text" class="w-full bg-slate-800 border border-slate-700 p-2 rounded item-spek"></td>
+                                <td class="py-2 pr-2"><input type="number" class="w-full bg-slate-800 border border-slate-700 p-2 rounded item-jumlah" required></td>
+                                <td class="py-2 text-center"><button type="button" onclick="removeRow(this)" class="text-red-500"><i class="fas fa-times"></i></button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <button type="button" onclick="addRow()" class="text-xs text-blue-400 hover:text-blue-300">+ Tambah Baris</button>
+                    
+                    <div class="pt-4">
+                        <button type="submit" id="btn-submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition">
+                            SIMPAN PENGAJUAN
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <section id="tab-database" class="tab-content hidden">
+                <h2 class="text-2xl font-bold mb-6">Database Pengajuan</h2>
+                <div id="databaseBody" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    </div>
+            </section>
+
+        </main>
+    </div>
+
+    <div id="sync-indicator" class="fixed bottom-5 right-5 px-3 py-1.5 rounded-full text-[10px] font-bold z-50 border bg-slate-900 text-slate-500 border-slate-700">
+        Initializing...
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAOAMNE1yBVB09dbO-4Rr-D7KPODU0-694",
+            authDomain: "notadinasrt.firebaseapp.com",
+            projectId: "notadinasrt",
+            storageBucket: "notadinasrt.firebasestorage.app",
+            messagingSenderId: "96523383307",
+            appId: "1:96523383307:web:9a0bc43bd7f6375e050d0e"
+        };
+
+        // URUTAN YANG BENAR (Fix ReferenceError)
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        let pengajuanData = [];
+
+        // UI Handler
+        const updateSyncIndicator = (status, colorClass) => {
+            const el = document.getElementById('sync-indicator');
+            el.innerHTML = `<i class="fas fa-circle mr-2"></i> ${status}`;
+            el.className = `fixed bottom-5 right-5 px-3 py-1.5 rounded-full text-[10px] font-bold z-50 border ${colorClass}`;
+        };
+
+        // Login & Sync
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                document.getElementById('user-display').innerText = user.uid.substring(0, 8);
+                setupRealtimeSync();
+            } else {
+                signInAnonymously(auth).catch(console.error);
+            }
         });
-    };
 
-    window.renderDatabase = () => {
-        const body = document.getElementById('databaseBody');
-        body.innerHTML = '';
-        pengajuanData.forEach(entry => {
-            entry.items.forEach(item => {
-                body.innerHTML += `
-                    <tr class="hover:bg-slate-800/30">
-                        <td class="p-4 font-mono text-blue-400">${entry.kode}<br><span class="text-slate-500">${entry.tanggal}</span></td>
-                        <td class="p-4">${entry.pemohon}<br><span class="text-[9px] text-slate-500">${entry.unit}</span></td>
-                        <td class="p-4"><b>${item.nama}</b><br><span class="text-slate-500">${item.spek}</span></td>
-                        <td class="p-4"><span class="status-badge-base badge-pending">${item.status}</span></td>
-                        <td class="p-4 text-slate-400">${item.alasan || '-'}</td>
-                        <td class="p-4 text-center"><button class="text-blue-500"><i class="fas fa-edit"></i></button></td>
-                    </tr>`;
+        function setupRealtimeSync() {
+            const q = query(collection(db, 'nota-pengajuan'), orderBy('timestamp', 'desc'));
+            onSnapshot(q, (snapshot) => {
+                pengajuanData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderDashboard();
+                renderDatabase();
+                updateSyncIndicator("Connected", "bg-emerald-900/20 text-emerald-500 border-emerald-500/50");
+            }, (err) => {
+                updateSyncIndicator("Error: " + err.code, "bg-red-900/20 text-red-500 border-red-500/50");
             });
+        }
+
+        // Global Functions (ditempel ke window agar bisa dipanggil HTML)
+        window.addRow = () => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="py-2 pr-2"><input type="text" class="w-full bg-slate-800 border border-slate-700 p-2 rounded item-nama" required></td>
+                <td class="py-2 pr-2"><input type="text" class="w-full bg-slate-800 border border-slate-700 p-2 rounded item-spek"></td>
+                <td class="py-2 pr-2"><input type="number" class="w-full bg-slate-800 border border-slate-700 p-2 rounded item-jumlah" required></td>
+                <td class="py-2 text-center"><button type="button" onclick="removeRow(this)" class="text-red-500"><i class="fas fa-times"></i></button></td>`;
+            document.getElementById('barangBody').appendChild(tr);
+        };
+
+        window.removeRow = (btn) => {
+            if(document.querySelectorAll('#barangBody tr').length > 1) btn.closest('tr').remove();
+        };
+
+        window.switchTab = (id) => {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+            document.getElementById(`tab-${id}`).classList.remove('hidden');
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('bg-slate-800', 'text-blue-400'));
+            document.getElementById(`nav-${id}`).classList.add('bg-slate-800', 'text-blue-400');
+        };
+
+        const renderDashboard = () => {
+            const body = document.getElementById('recent-activity-body');
+            body.innerHTML = pengajuanData.slice(0, 5).map(r => `
+                <tr class="border-b border-slate-800/50">
+                    <td class="p-4 font-mono text-blue-400">${r.kode}</td>
+                    <td class="p-4">${r.pemohon}</td>
+                    <td class="p-4 text-slate-500 text-xs">${r.kategori}</td>
+                    <td class="p-4 text-slate-500 text-xs">${r.tanggal}</td>
+                    <td class="p-4"><span class="px-2 py-1 bg-blue-900/30 text-blue-400 text-[10px] rounded">Proses</span></td>
+                </tr>`).join('');
+        };
+
+        const renderDatabase = () => {
+            const container = document.getElementById('databaseBody');
+            container.innerHTML = pengajuanData.map(r => `
+                <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-blue-400 font-bold font-mono">${r.kode}</span>
+                        <span class="text-[10px] text-slate-500">${r.tanggal}</span>
+                    </div>
+                    <p class="text-sm font-bold">${r.pemohon}</p>
+                    <p class="text-[10px] text-slate-500 mb-3">${r.unit}</p>
+                    <div class="border-t border-slate-800 pt-2">
+                        ${r.items.map(i => `<div class="text-[11px] flex justify-between"><span>${i.nama}</span><span>x${i.jumlah}</span></div>`).join('')}
+                    </div>
+                </div>`).join('');
+        };
+
+        // Form Submit
+        document.getElementById('formPengajuan').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btn-submit');
+            btn.disabled = true;
+            btn.innerText = "MENYIMPAN...";
+
+            const items = Array.from(document.querySelectorAll('#barangBody tr')).map(row => ({
+                nama: row.querySelector('.item-nama').value,
+                spek: row.querySelector('.item-spek').value,
+                jumlah: row.querySelector('.item-jumlah').value
+            }));
+
+            try {
+                const kategori = document.getElementById('inputKategori').value;
+                await addDoc(collection(db, 'nota-pengajuan'), {
+                    kode: `${kategori === 'Nota Dinas' ? 'ND' : 'FORM'}-${Date.now().toString().slice(-4)}`,
+                    kategori: kategori,
+                    tanggal: document.getElementById('inputTanggal').value,
+                    pemohon: document.getElementById('inputPemohon').value,
+                    unit: document.getElementById('inputUnit').value,
+                    items: items,
+                    timestamp: Date.now()
+                });
+                alert("Data Berhasil Disimpan!");
+                e.target.reset();
+                switchTab('dashboard');
+            } catch (err) {
+                console.error(err);
+                alert("Gagal menyimpan!");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "SIMPAN PENGAJUAN";
+            }
         });
-    };
-
-    // Fungsi Tambah/Hapus Baris
-    window.addRow = () => {
-        const tr = document.createElement('tr');
-        tr.className = "border-b border-slate-800/30";
-        tr.innerHTML = `
-            <td class="py-2 pr-2"><input type="text" class="input-field item-nama" required></td>
-            <td class="py-2 pr-2"><input type="text" class="input-field item-spek"></td>
-            <td class="py-2 pr-2"><input type="number" class="input-field item-jumlah" required></td>
-            <td class="py-2 pr-2"><input type="text" class="input-field item-alasan"></td>
-            <td class="py-2 text-center"><button type="button" onclick="removeRow(this)" class="text-slate-600 hover:text-red-500"><i class="fas fa-trash"></i></button></td>
-        `;
-        document.getElementById('barangBody').appendChild(tr);
-    };
-
-    window.removeRow = (btn) => {
-        if(document.querySelectorAll('#barangBody tr').length > 1) btn.closest('tr').remove();
-    };
-
-    window.switchTab = (id) => {
-        document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
-        document.getElementById(`tab-${id}`).classList.remove('hidden');
-        document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
-        document.getElementById(`nav-${id}`)?.classList.add('active');
-    };
-</script>
+    </script>
+</body>
+</html>
