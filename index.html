@@ -509,7 +509,7 @@
             let html = `
                 <table class="w-full text-left text-[11px]">
                     <thead class="bg-slate-800 text-slate-400">
-                        <tr><th class="p-2 border border-slate-700">Tgl</th><th class="p-2 border border-slate-700">No. Tiket</th><th class="p-2 border border-slate-700">Pemohon</th><th class="p-2 border border-slate-700">Barang</th><th class="p-2 border border-slate-700">Status</th><th class="p-2 border border-slate-700">Keterangan</th></tr>
+                        <tr><th class="p-2 border border-slate-700">Tgl</th><th class="p-2 border border-slate-700">No. ID</th><th class="p-2 border border-slate-700">Pemohon</th><th class="p-2 border border-slate-700">Barang</th><th class="p-2 border border-slate-700">Status</th><th class="p-2 border border-slate-700">Keterangan</th></tr>
                     </thead>
                     <tbody class="divide-y divide-slate-800">
                         ${filtered.map(x => `
@@ -534,7 +534,7 @@
             const tableData = data.map(x => [x.tgl, x.tiket, `${x.pemohon}\n(${x.unit})`, `${x.item.name}\nQty: ${x.item.qty}\nSpec: ${x.item.spec || '-'}`, x.item.status, x.item.ket || '-']);
             doc.autoTable({
                 startY: 32,
-                head: [['Tanggal', 'No. Tiket', 'Pemohon', 'Detail Barang', 'Status', 'Keterangan']],
+                head: [['Tanggal', 'No. ID', 'Pemohon', 'Detail Barang', 'Status', 'Keterangan']],
                 body: tableData,
                 theme: 'grid',
                 styles: { fontSize: 8, cellPadding: 3 },
