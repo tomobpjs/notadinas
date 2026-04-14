@@ -24,6 +24,7 @@
         #loading-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.5s ease; }
         .spinner { width: 40px; height: 40px; border: 4px solid #3b82f6; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .watermark { font-size: 10px; color: rgba(255, 255, 255, 0.2); font-weight: 500; letter-spacing: 0.5px; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col md:flex-row">
@@ -50,9 +51,13 @@
         </nav>
     </aside>
 
-    <main class="flex-grow p-4 md:p-8 overflow-y-auto">
+    <main class="flex-grow p-4 md:p-8 overflow-y-auto relative">
         <section id="tab-dashboard" class="tab-content active space-y-6">
-            <h2 class="text-2xl font-bold">Ringkasan Pengajuan</h2>
+            <div class="flex justify-between items-start">
+                <h2 class="text-2xl font-bold">Ringkasan Pengajuan</h2>
+                <div class="watermark pt-1">tomosjr copyright2026</div>
+            </div>
+            
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6" id="stats-container"></div>
             <div class="glass-card rounded-2xl p-6">
                 <h3 class="font-bold mb-4 flex items-center gap-2"><i class="fas fa-history text-blue-400"></i> Aktivitas Terbaru</h3>
@@ -103,7 +108,6 @@
                     </div>
                     <div class="space-y-1">
                         <label class="text-[10px] uppercase text-slate-400 font-bold">Unit / Departemen</label>
-                        <!-- Diubah dari select ke input manual sesuai permintaan -->
                         <input type="text" id="unit" class="w-full p-3 rounded-xl" placeholder="Ketik Unit/Departemen manual" required>
                     </div>
                 </div>
@@ -195,7 +199,6 @@
         </section>
     </main>
 
-    <!-- Modal Status -->
     <div id="statusModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
         <div class="glass-card w-full max-w-md p-6 rounded-2xl border-slate-700">
             <h3 class="text-lg font-bold mb-1">Update Status Barang</h3>
@@ -251,7 +254,6 @@
                     try {
                         await signInWithCustomToken(auth, __initial_auth_token);
                     } catch (tokenErr) {
-                        console.warn("Custom token failed/mismatch, falling back to anonymous login.", tokenErr);
                         await signInAnonymously(auth);
                     }
                 } else {
@@ -271,7 +273,6 @@
                 window.addItemRow();
                 window.generateTicketNumber();
             } catch (err) { 
-                console.error("Firebase Auth General Error:", err); 
                 document.getElementById('user-info').innerText = "Koneksi Bermasalah";
             }
         };
@@ -402,15 +403,10 @@
 
         document.getElementById('notaForm').onsubmit = async (e) => {
             e.preventDefault();
-            if (!auth.currentUser) {
-                alert("Sesi berakhir, silakan muat ulang halaman.");
-                return;
-            }
-
+            if (!auth.currentUser) return;
             const btn = document.getElementById('submit-btn');
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
-
             const items = Array.from(document.querySelectorAll('.item-row')).map(row => ({
                 rowId: row.querySelector('.item-row-id').value,
                 name: row.querySelector('.item-name').value,
@@ -420,17 +416,14 @@
                 status: row.querySelector('.item-status').value,
                 ket: row.querySelector('.item-ket').value
             }));
-
             const data = {
                 tgl: document.getElementById('tgl_nota').value,
                 tiket: document.getElementById('no_tiket').value,
                 kategori: document.getElementById('kategori').value,
                 pemohon: document.getElementById('nama_pemohon').value,
                 unit: document.getElementById('unit').value,
-                items, 
-                updatedAt: new Date().toISOString()
+                items, updatedAt: new Date().toISOString()
             };
-
             try {
                 if(currentEditId) {
                     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', currentEditId), data);
@@ -439,12 +432,8 @@
                 }
                 window.cancelEdit();
                 window.switchTab('database');
-            } catch (err) { 
-                console.error("Save error:", err);
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-save"></i> Simpan Data ke Cloud';
-            }
+            } catch (err) { console.error(err); }
+            finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Simpan Data ke Cloud'; }
         };
 
         window.editNota = (id) => {
@@ -464,17 +453,14 @@
 
         window.deleteNota = async (id) => { 
             if(confirm('Hapus permanen dari cloud?')) {
-                try {
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', id));
-                } catch (err) { console.error(err); }
+                try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', id)); } catch (err) { console.error(err); }
             }
         };
 
         window.openStatusModal = (nId, rId) => {
             const n = cloudData.find(x => x.id === nId);
             const it = n.items.find(x => x.rowId === rId);
-            currentEditId = nId; 
-            activeItemId = rId;
+            currentEditId = nId; activeItemId = rId;
             document.getElementById('modal-item-name').innerText = it.name;
             document.getElementById('newItemStatus').value = it.status;
             document.getElementById('item_ket').value = it.ket || '';
@@ -488,23 +474,20 @@
             const newItems = n.items.map(it => it.rowId === activeItemId ? {...it, status, ket} : it);
             try {
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', currentEditId), {
-                    items: newItems,
-                    updatedAt: new Date().toISOString()
+                    items: newItems, updatedAt: new Date().toISOString()
                 });
                 window.closeModal();
             } catch (err) { console.error(err); }
         };
 
         window.closeModal = () => document.getElementById('statusModal').classList.add('hidden');
-        
         window.cancelEdit = () => {
             currentEditId = null; 
             document.getElementById('form-title').innerText = "Input Pengajuan Baru";
             document.getElementById('cancel-edit-btn').classList.add('hidden');
             document.getElementById('notaForm').reset();
             document.getElementById('items-container').innerHTML = '';
-            window.addItemRow(); 
-            window.generateTicketNumber();
+            window.addItemRow(); window.generateTicketNumber();
         };
 
         window.generatePreview = () => {
@@ -512,42 +495,25 @@
             const end = document.getElementById('rptEnd').value;
             const kat = document.getElementById('rptKategori').value;
             const stat = document.getElementById('rptStatus').value;
-
             const filtered = cloudData.filter(n => {
                 const dateOk = (!start || n.tgl >= start) && (!end || n.tgl <= end);
                 const katOk = kat === 'all' || n.kategori === kat;
                 return dateOk && katOk;
             }).flatMap(n => n.items.map(it => ({...n, item: it})))
               .filter(x => stat === 'all' || x.item.status === stat);
-
             if(filtered.length === 0) {
                 document.getElementById('report-preview-area').innerHTML = '<p class="text-center py-10 text-slate-500 italic">Tidak ada data ditemukan</p>';
                 document.getElementById('download-btn-container').classList.add('hidden');
                 return;
             }
-
             let html = `
                 <table class="w-full text-left text-[11px]">
                     <thead class="bg-slate-800 text-slate-400">
-                        <tr>
-                            <th class="p-2 border border-slate-700">Tgl</th>
-                            <th class="p-2 border border-slate-700">No. Tiket</th>
-                            <th class="p-2 border border-slate-700">Pemohon</th>
-                            <th class="p-2 border border-slate-700">Barang</th>
-                            <th class="p-2 border border-slate-700">Status</th>
-                            <th class="p-2 border border-slate-700">Keterangan</th>
-                        </tr>
+                        <tr><th class="p-2 border border-slate-700">Tgl</th><th class="p-2 border border-slate-700">No. Tiket</th><th class="p-2 border border-slate-700">Pemohon</th><th class="p-2 border border-slate-700">Barang</th><th class="p-2 border border-slate-700">Status</th><th class="p-2 border border-slate-700">Keterangan</th></tr>
                     </thead>
                     <tbody class="divide-y divide-slate-800">
                         ${filtered.map(x => `
-                            <tr>
-                                <td class="p-2 border border-slate-800">${x.tgl}</td>
-                                <td class="p-2 border border-slate-800 font-mono">${x.tiket}</td>
-                                <td class="p-2 border border-slate-800">${x.pemohon}</td>
-                                <td class="p-2 border border-slate-800">${x.item.name} (x${x.item.qty})</td>
-                                <td class="p-2 border border-slate-800">${x.item.status}</td>
-                                <td class="p-2 border border-slate-800 italic text-[10px]">${x.item.ket || '-'}</td>
-                            </tr>
+                            <tr><td class="p-2 border border-slate-800">${x.tgl}</td><td class="p-2 border border-slate-800 font-mono">${x.tiket}</td><td class="p-2 border border-slate-800">${x.pemohon}</td><td class="p-2 border border-slate-800">${x.item.name} (x${x.item.qty})</td><td class="p-2 border border-slate-800">${x.item.status}</td><td class="p-2 border border-slate-800 italic text-[10px]">${x.item.ket || '-'}</td></tr>
                         `).join('')}
                     </tbody>
                 </table>
@@ -561,24 +527,11 @@
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('l', 'mm', 'a4');
             const data = window.lastFiltered;
-
-            doc.setFontSize(18);
-            doc.setTextColor(15, 23, 42);
+            doc.setFontSize(18); doc.setTextColor(15, 23, 42);
             doc.text("LAPORAN REKAP PENGAJUAN BARANG", 14, 20);
-            
-            doc.setFontSize(10);
-            doc.setTextColor(100);
+            doc.setFontSize(10); doc.setTextColor(100);
             doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, 26);
-
-            const tableData = data.map(x => [
-                x.tgl, 
-                x.tiket, 
-                `${x.pemohon}\n(${x.unit})`, 
-                `${x.item.name}\nQty: ${x.item.qty}\nSpec: ${x.item.spec || '-'}`, 
-                x.item.status, 
-                x.item.ket || '-'
-            ]);
-
+            const tableData = data.map(x => [x.tgl, x.tiket, `${x.pemohon}\n(${x.unit})`, `${x.item.name}\nQty: ${x.item.qty}\nSpec: ${x.item.spec || '-'}`, x.item.status, x.item.ket || '-']);
             doc.autoTable({
                 startY: 32,
                 head: [['Tanggal', 'No. Tiket', 'Pemohon', 'Detail Barang', 'Status', 'Keterangan']],
@@ -588,7 +541,6 @@
                 headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
                 alternateRowStyles: { fillColor: [245, 247, 250] }
             });
-
             doc.save(`Laporan_Nota_Dinas_${Date.now()}.pdf`);
         };
 
