@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>E-Nota Dinas Cloud v1.0.0</title>
+    <title>E-Nota Dinas Cloud v1.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        body { font-family: 'Inter', Verdana; background-color: #0f172a; color: #e2e8f0; font-size: 13px; overflow-x: hidden; }
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #e2e8f0; font-size: 13px; overflow-x: hidden; }
         .glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
         .sidebar-link { transition: all 0.3s ease; border-left: 4px solid transparent; cursor: pointer; }
         .sidebar-link:hover, .sidebar-link.active { background: rgba(59, 130, 246, 0.1); color: #60a5fa; border-left-color: #3b82f6; }
@@ -24,7 +24,11 @@
         #loading-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.5s ease; }
         .spinner { width: 40px; height: 40px; border: 4px solid #3b82f6; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .watermark { font-size: 14px; color: rgba(255, 255, 255, 0.2); font-weight: 500; letter-spacing: 0.5px; }
+        
+        /* Watermark Styles */
+        .watermark { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 40; pointer-events: none; text-align: right; }
+        .watermark-text { font-size: 10px; font-weight: 800; letter-spacing: 0.1em; color: rgba(255, 255, 255, 0.25); text-transform: uppercase; }
+        .watermark-sub { font-size: 9px; color: rgba(71, 85, 105, 0.6); font-family: monospace; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col md:flex-row">
@@ -34,17 +38,23 @@
         <p class="text-blue-400 font-bold animate-pulse">Menghubungkan ke Cloud...</p>
     </div>
 
+    <!-- Pojok Kanan Atas Watermark -->
+    <div class="watermark hidden md:block">
+        <div class="watermark-text">tomosjr 2026 Copyright</div>
+        <div class="watermark-sub">v6.4.2_Build_Stable</div>
+    </div>
+
     <aside class="w-full md:w-64 glass-card border-r border-slate-700 flex flex-col shrink-0">
         <div class="p-6">
             <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent flex items-center gap-3">
-                <i class="fas fa-cloud"></i> Rekap Pengajuan Unit
+                <i class="fas fa-cloud"></i> E-REKAP PENGAJUAN BAG.RT
             </h1>
             <div id="user-info" class="text-[10px] text-slate-400 mt-2 truncate">Mengautentikasi...</div>
         </div>
         <nav class="flex-grow">
             <ul class="space-y-1">
                 <li><a onclick="switchTab('dashboard')" class="sidebar-link active flex items-center gap-4 px-6 py-4" id="nav-dashboard"><i class="fas fa-chart-line w-5"></i> Dashboard</a></li>
-                <li><a onclick="switchTab('form')" class="sidebar-link flex items-center gap-4 px-6 py-4" id="nav-form"><i class="fas fa-plus-circle w-5"></i> Input Pengajuan</a></li>
+                <li><a onclick="switchTab('form')" class="sidebar-link flex items-center gap-4 px-6 py-4" id="nav-form"><i class="fas fa-plus-circle w-5"></i> Input Nota</a></li>
                 <li><a onclick="switchTab('database')" class="sidebar-link flex items-center gap-4 px-6 py-4" id="nav-database"><i class="fas fa-database w-5"></i> Database Cloud</a></li>
                 <li><a onclick="switchTab('report')" class="sidebar-link flex items-center gap-4 px-6 py-4" id="nav-report"><i class="fas fa-file-export w-5"></i> Cetak Laporan</a></li>
             </ul>
@@ -52,20 +62,35 @@
     </aside>
 
     <main class="flex-grow p-4 md:p-8 overflow-y-auto relative">
+        <!-- Dashboard Section -->
         <section id="tab-dashboard" class="tab-content active space-y-6">
-            <div class="flex justify-between items-start">
+            <div class="flex justify-between items-center">
                 <h2 class="text-2xl font-bold">Ringkasan Pengajuan</h2>
-                <div class="watermark pt-5">tomosjr copyright2026</div>
+                <div class="text-[10px] uppercase font-bold text-slate-500 bg-slate-800/50 px-3 py-1 rounded-lg border border-slate-700">
+                    Auto-Sync Active
+                </div>
             </div>
-            
+
+            <!-- Stats Grid -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6" id="stats-container"></div>
+
+            <!-- Analisis Persentase Status -->
+            <div class="glass-card rounded-2xl p-6">
+                <h3 class="font-bold mb-6 flex items-center gap-2 text-blue-400">
+                    <i class="fas fa-percentage"></i> Persentase Status Pengajuan (Per Barang)
+                </h3>
+                <div id="percentage-container" class="space-y-6">
+                    <!-- Konten dinamis dari JS -->
+                </div>
+            </div>
+
             <div class="glass-card rounded-2xl p-6">
                 <h3 class="font-bold mb-4 flex items-center gap-2"><i class="fas fa-history text-blue-400"></i> Aktivitas Terbaru</h3>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left">
                         <thead>
                             <tr class="border-b border-slate-700 text-slate-500 text-[11px] uppercase">
-                                <th class="py-3 px-4">No.ID</th>
+                                <th class="py-3 px-4">No. Tiket</th>
                                 <th class="py-3 px-4">Pemohon</th>
                                 <th class="py-3 px-4">Item Utama</th>
                                 <th class="py-3 px-4 text-right">Status Data</th>
@@ -77,6 +102,7 @@
             </div>
         </section>
 
+        <!-- Form Section -->
         <section id="tab-form" class="tab-content space-y-6">
             <div class="flex justify-between items-center">
                 <h2 id="form-title" class="text-2xl font-bold">Input Pengajuan Baru</h2>
@@ -108,6 +134,7 @@
                     </div>
                     <div class="space-y-1">
                         <label class="text-[10px] uppercase text-slate-400 font-bold">Unit / Departemen</label>
+                        <!-- Unit diubah menjadi input manual -->
                         <input type="text" id="unit" class="w-full p-3 rounded-xl" placeholder="Ketik Unit/Departemen manual" required>
                     </div>
                 </div>
@@ -124,6 +151,7 @@
             </form>
         </section>
 
+        <!-- Database Section -->
         <section id="tab-database" class="tab-content space-y-6">
             <div class="flex flex-col md:flex-row justify-between items-end gap-4">
                 <h2 class="text-2xl font-bold">Database Cloud</h2>
@@ -149,6 +177,7 @@
             </div>
         </section>
 
+        <!-- Report Section -->
         <section id="tab-report" class="tab-content space-y-6">
             <div class="flex flex-col md:flex-row justify-between items-end gap-4">
                 <h2 class="text-2xl font-bold">Laporan & PDF</h2>
@@ -199,6 +228,7 @@
         </section>
     </main>
 
+    <!-- Modal Status -->
     <div id="statusModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
         <div class="glass-card w-full max-w-md p-6 rounded-2xl border-slate-700">
             <h3 class="text-lg font-bold mb-1">Update Status Barang</h3>
@@ -229,14 +259,7 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = {
-  apiKey: "AIzaSyAOAMNE1yBVB09dbO-4Rr-D7KPODU0-694",
-  authDomain: "notadinasrt.firebaseapp.com",
-  projectId: "notadinasrt",
-  storageBucket: "notadinasrt.firebasestorage.app",
-  messagingSenderId: "96523383307",
-  appId: "1:96523383307:web:03a32dfc68ac4389050d0e"
-};
+        const firebaseConfig = JSON.parse(__firebase_config);
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
@@ -273,6 +296,7 @@
                 window.addItemRow();
                 window.generateTicketNumber();
             } catch (err) { 
+                console.error("Firebase Auth General Error:", err); 
                 document.getElementById('user-info').innerText = "Koneksi Bermasalah";
             }
         };
@@ -338,15 +362,58 @@
 
         const renderDashboard = () => {
             let p = 0, s = 0, c = 0;
-            cloudData.forEach(n => n.items.forEach(it => {
-                if(it.status === 'Proses') p++; else if(it.status === 'Selesai') s++; else c++;
-            }));
+            let totalItems = 0;
+            
+            cloudData.forEach(n => {
+                n.items.forEach(it => {
+                    totalItems++;
+                    if(it.status === 'Proses') p++; 
+                    else if(it.status === 'Selesai') s++; 
+                    else if(it.status === 'Cancel') c++;
+                });
+            });
+
+            const pPct = totalItems > 0 ? ((p/totalItems)*100).toFixed(1) : 0;
+            const sPct = totalItems > 0 ? ((s/totalItems)*100).toFixed(1) : 0;
+            const cPct = totalItems > 0 ? ((c/totalItems)*100).toFixed(1) : 0;
+
             document.getElementById('stats-container').innerHTML = `
-                <div class="glass-card p-4 rounded-2xl border-l-4 border-l-blue-500"><p class="text-[10px] text-slate-400 font-bold uppercase">Total Nota</p><p class="text-2xl font-bold">${cloudData.length}</p></div>
-                <div class="glass-card p-4 rounded-2xl border-l-4 border-l-yellow-500"><p class="text-[10px] text-yellow-500 font-bold uppercase">Proses</p><p class="text-2xl font-bold">${p}</p></div>
-                <div class="glass-card p-4 rounded-2xl border-l-4 border-l-emerald-500"><p class="text-[10px] text-emerald-500 font-bold uppercase">Selesai</p><p class="text-2xl font-bold">${s}</p></div>
-                <div class="glass-card p-4 rounded-2xl border-l-4 border-l-rose-500"><p class="text-[10px] text-rose-500 font-bold uppercase">Cancel</p><p class="text-2xl font-bold">${c}</p></div>
+                <div class="glass-card p-4 rounded-2xl border-l-4 border-l-blue-500 shadow-lg"><p class="text-[10px] text-slate-400 font-bold uppercase">Total Nota</p><p class="text-2xl font-bold">${cloudData.length}</p></div>
+                <div class="glass-card p-4 rounded-2xl border-l-4 border-l-yellow-500 shadow-lg"><p class="text-[10px] text-yellow-500 font-bold uppercase">Proses</p><p class="text-2xl font-bold">${p}</p></div>
+                <div class="glass-card p-4 rounded-2xl border-l-4 border-l-emerald-500 shadow-lg"><p class="text-[10px] text-emerald-500 font-bold uppercase">Selesai</p><p class="text-2xl font-bold">${s}</p></div>
+                <div class="glass-card p-4 rounded-2xl border-l-4 border-l-rose-500 shadow-lg"><p class="text-[10px] text-rose-500 font-bold uppercase">Cancel</p><p class="text-2xl font-bold">${c}</p></div>
             `;
+
+            document.getElementById('percentage-container').innerHTML = `
+                <div class="space-y-2">
+                    <div class="flex justify-between items-end">
+                        <span class="text-xs font-bold text-yellow-500 uppercase flex items-center gap-2"><i class="fas fa-spinner fa-spin"></i> Sedang Diproses</span>
+                        <span class="text-sm font-bold text-yellow-500">${pPct}%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
+                        <div class="bg-yellow-500 h-full transition-all duration-1000" style="width: ${pPct}%"></div>
+                    </div>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex justify-between items-end">
+                        <span class="text-xs font-bold text-emerald-500 uppercase flex items-center gap-2"><i class="fas fa-check-circle"></i> Selesai / Terpenuhi</span>
+                        <span class="text-sm font-bold text-emerald-500">${sPct}%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
+                        <div class="bg-emerald-500 h-full transition-all duration-1000" style="width: ${sPct}%"></div>
+                    </div>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex justify-between items-end">
+                        <span class="text-xs font-bold text-rose-500 uppercase flex items-center gap-2"><i class="fas fa-times-circle"></i> Dibatalkan / Gagal</span>
+                        <span class="text-sm font-bold text-rose-500">${cPct}%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
+                        <div class="bg-rose-500 h-full transition-all duration-1000" style="width: ${cPct}%"></div>
+                    </div>
+                </div>
+            `;
+
             const sorted = [...cloudData].sort((a,b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
             document.getElementById('recent-table-body').innerHTML = sorted.slice(0,5).map(n => `
                 <tr class="hover:bg-slate-800/20">
@@ -404,9 +471,11 @@
         document.getElementById('notaForm').onsubmit = async (e) => {
             e.preventDefault();
             if (!auth.currentUser) return;
+
             const btn = document.getElementById('submit-btn');
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+
             const items = Array.from(document.querySelectorAll('.item-row')).map(row => ({
                 rowId: row.querySelector('.item-row-id').value,
                 name: row.querySelector('.item-name').value,
@@ -416,14 +485,17 @@
                 status: row.querySelector('.item-status').value,
                 ket: row.querySelector('.item-ket').value
             }));
+
             const data = {
                 tgl: document.getElementById('tgl_nota').value,
                 tiket: document.getElementById('no_tiket').value,
                 kategori: document.getElementById('kategori').value,
                 pemohon: document.getElementById('nama_pemohon').value,
                 unit: document.getElementById('unit').value,
-                items, updatedAt: new Date().toISOString()
+                items, 
+                updatedAt: new Date().toISOString()
             };
+
             try {
                 if(currentEditId) {
                     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', currentEditId), data);
@@ -433,7 +505,10 @@
                 window.cancelEdit();
                 window.switchTab('database');
             } catch (err) { console.error(err); }
-            finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Simpan Data ke Cloud'; }
+            finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save"></i> Simpan Data ke Cloud';
+            }
         };
 
         window.editNota = (id) => {
@@ -460,7 +535,8 @@
         window.openStatusModal = (nId, rId) => {
             const n = cloudData.find(x => x.id === nId);
             const it = n.items.find(x => x.rowId === rId);
-            currentEditId = nId; activeItemId = rId;
+            currentEditId = nId; 
+            activeItemId = rId;
             document.getElementById('modal-item-name').innerText = it.name;
             document.getElementById('newItemStatus').value = it.status;
             document.getElementById('item_ket').value = it.ket || '';
@@ -474,20 +550,23 @@
             const newItems = n.items.map(it => it.rowId === activeItemId ? {...it, status, ket} : it);
             try {
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', currentEditId), {
-                    items: newItems, updatedAt: new Date().toISOString()
+                    items: newItems,
+                    updatedAt: new Date().toISOString()
                 });
                 window.closeModal();
             } catch (err) { console.error(err); }
         };
 
         window.closeModal = () => document.getElementById('statusModal').classList.add('hidden');
+        
         window.cancelEdit = () => {
             currentEditId = null; 
             document.getElementById('form-title').innerText = "Input Pengajuan Baru";
             document.getElementById('cancel-edit-btn').classList.add('hidden');
             document.getElementById('notaForm').reset();
             document.getElementById('items-container').innerHTML = '';
-            window.addItemRow(); window.generateTicketNumber();
+            window.addItemRow(); 
+            window.generateTicketNumber();
         };
 
         window.generatePreview = () => {
@@ -495,25 +574,40 @@
             const end = document.getElementById('rptEnd').value;
             const kat = document.getElementById('rptKategori').value;
             const stat = document.getElementById('rptStatus').value;
+
             const filtered = cloudData.filter(n => {
                 const dateOk = (!start || n.tgl >= start) && (!end || n.tgl <= end);
                 const katOk = kat === 'all' || n.kategori === kat;
                 return dateOk && katOk;
             }).flatMap(n => n.items.map(it => ({...n, item: it})))
               .filter(x => stat === 'all' || x.item.status === stat);
+
             if(filtered.length === 0) {
                 document.getElementById('report-preview-area').innerHTML = '<p class="text-center py-10 text-slate-500 italic">Tidak ada data ditemukan</p>';
                 document.getElementById('download-btn-container').classList.add('hidden');
                 return;
             }
+
             let html = `
                 <table class="w-full text-left text-[11px]">
                     <thead class="bg-slate-800 text-slate-400">
-                        <tr><th class="p-2 border border-slate-700">Tgl</th><th class="p-2 border border-slate-700">No. ID</th><th class="p-2 border border-slate-700">Pemohon</th><th class="p-2 border border-slate-700">Barang</th><th class="p-2 border border-slate-700">Status</th><th class="p-2 border border-slate-700">Keterangan</th></tr>
+                        <tr>
+                            <th class="p-2 border border-slate-700">Tgl</th>
+                            <th class="p-2 border border-slate-700">No. Tiket</th>
+                            <th class="p-2 border border-slate-700">Pemohon</th>
+                            <th class="p-2 border border-slate-700">Barang</th>
+                            <th class="p-2 border border-slate-700">Status</th>
+                        </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-800">
                         ${filtered.map(x => `
-                            <tr><td class="p-2 border border-slate-800">${x.tgl}</td><td class="p-2 border border-slate-800 font-mono">${x.tiket}</td><td class="p-2 border border-slate-800">${x.pemohon}</td><td class="p-2 border border-slate-800">${x.item.name} (x${x.item.qty})</td><td class="p-2 border border-slate-800">${x.item.status}</td><td class="p-2 border border-slate-800 italic text-[10px]">${x.item.ket || '-'}</td></tr>
+                            <tr>
+                                <td class="p-2 border border-slate-800">${x.tgl}</td>
+                                <td class="p-2 border border-slate-800 font-mono">${x.tiket}</td>
+                                <td class="p-2 border border-slate-800">${x.pemohon}</td>
+                                <td class="p-2 border border-slate-800">${x.item.name} (x${x.item.qty})</td>
+                                <td class="p-2 border border-slate-800">${x.item.status}</td>
+                            </tr>
                         `).join('')}
                     </tbody>
                 </table>
@@ -527,24 +621,36 @@
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('l', 'mm', 'a4');
             const data = window.lastFiltered;
-            doc.setFontSize(18); doc.setTextColor(15, 23, 42);
+
+            doc.setFontSize(18);
+            doc.setTextColor(15, 23, 42);
             doc.text("LAPORAN REKAP PENGAJUAN BARANG", 14, 20);
-            doc.setFontSize(10); doc.setTextColor(100);
+            doc.setFontSize(10);
+            doc.setTextColor(100);
             doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, 26);
-            const tableData = data.map(x => [x.tgl, x.tiket, `${x.pemohon}\n(${x.unit})`, `${x.item.name}\nQty: ${x.item.qty}\nSpec: ${x.item.spec || '-'}`, x.item.status, x.item.ket || '-']);
+
+            const tableData = data.map(x => [
+                x.tgl, 
+                x.tiket, 
+                `${x.pemohon}\n(${x.unit})`, 
+                `${x.item.name}\nQty: ${x.item.qty}\nSpec: ${x.item.spec || '-'}`, 
+                x.item.status, 
+                x.item.ket || '-'
+            ]);
+
             doc.autoTable({
                 startY: 32,
-                head: [['Tanggal', 'No. ID', 'Pemohon', 'Detail Barang', 'Status', 'Keterangan']],
+                head: [['Tanggal', 'No. Tiket', 'Pemohon', 'Detail Barang', 'Status', 'Keterangan']],
                 body: tableData,
                 theme: 'grid',
                 styles: { fontSize: 8, cellPadding: 3 },
-                headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
-                alternateRowStyles: { fillColor: [245, 247, 250] }
+                headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' }
             });
+
             doc.save(`Laporan_Nota_Dinas_${Date.now()}.pdf`);
         };
 
-        init();
-    </script>
-</body>
-</html>
+            init();
+        </script>
+    </body>
+    </html>
