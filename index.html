@@ -10,31 +10,29 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #e2e8f0; font-size: 13px; }
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #e2e8f0; font-size: 13px; overflow-x: hidden; }
         .glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
-        .sidebar-link { transition: all 0.3s ease; border-left: 4px solid transparent; }
+        .sidebar-link { transition: all 0.3s ease; border-left: 4px solid transparent; cursor: pointer; }
         .sidebar-link:hover, .sidebar-link.active { background: rgba(59, 130, 246, 0.1); color: #60a5fa; border-left-color: #3b82f6; }
         input, select, textarea { background: rgba(15, 23, 42, 0.6) !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; color: white !important; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
-        .status-pill { font-weight: 600; font-size: 10px; padding: 2px 8px; border-radius: 9999px; display: inline-flex; align-items: center; gap: 4px; }
-        .status-pending { background: rgba(234, 179, 8, 0.2); color: #eab308; border: 1px solid rgba(234, 179, 8, 0.3); }
-        .status-approved { background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); }
-        .status-rejected { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
-        #loading-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .status-pill { font-weight: 600; font-size: 10px; padding: 2px 8px; border-radius: 9999px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid transparent; }
+        .status-pending { background: rgba(234, 179, 8, 0.2); color: #eab308; border-color: rgba(234, 179, 8, 0.3); }
+        .status-approved { background: rgba(34, 197, 94, 0.2); color: #22c55e; border-color: rgba(34, 197, 94, 0.3); }
+        .status-rejected { background: rgba(239, 68, 68, 0.2); color: #ef4444; border-color: rgba(239, 68, 68, 0.3); }
+        #loading-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.5s ease; }
         .spinner { width: 40px; height: 40px; border: 4px solid #3b82f6; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="min-h-screen flex flex-col md:flex-row">
 
-    <!-- Overlay Loading -->
     <div id="loading-overlay">
         <div class="spinner mb-4"></div>
         <p class="text-blue-400 font-bold animate-pulse">Menghubungkan ke Cloud...</p>
     </div>
 
-    <!-- Sidebar -->
     <aside class="w-full md:w-64 glass-card border-r border-slate-700 flex flex-col shrink-0">
         <div class="p-6">
             <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent flex items-center gap-3">
@@ -44,18 +42,15 @@
         </div>
         <nav class="flex-grow">
             <ul class="space-y-1">
-                <li><a href="#" onclick="switchTab('dashboard')" class="sidebar-link active flex items-center gap-4 px-6 py-4" id="nav-dashboard"><i class="fas fa-chart-line w-5"></i> Dashboard</a></li>
-                <li><a href="#" onclick="switchTab('form')" class="sidebar-link flex items-center gap-4 px-6 py-4" id="nav-form"><i class="fas fa-plus-circle w-5"></i> Input Nota</a></li>
-                <li><a href="#" onclick="switchTab('database')" class="sidebar-link flex items-center gap-4 px-6 py-4" id="nav-database"><i class="fas fa-database w-5"></i> Database Cloud</a></li>
-                <li><a href="#" onclick="switchTab('report')" class="sidebar-link flex items-center gap-4 px-6 py-4" id="nav-report"><i class="fas fa-file-export w-5"></i> Cetak Laporan</a></li>
+                <li><a onclick="switchTab('dashboard')" class="sidebar-link active flex items-center gap-4 px-6 py-4" id="nav-dashboard"><i class="fas fa-chart-line w-5"></i> Dashboard</a></li>
+                <li><a onclick="switchTab('form')" class="sidebar-link flex items-center gap-4 px-6 py-4" id="nav-form"><i class="fas fa-plus-circle w-5"></i> Input Nota</a></li>
+                <li><a onclick="switchTab('database')" class="sidebar-link flex items-center gap-4 px-6 py-4" id="nav-database"><i class="fas fa-database w-5"></i> Database Cloud</a></li>
+                <li><a onclick="switchTab('report')" class="sidebar-link flex items-center gap-4 px-6 py-4" id="nav-report"><i class="fas fa-file-export w-5"></i> Cetak Laporan</a></li>
             </ul>
         </nav>
     </aside>
 
-    <!-- Konten Utama -->
     <main class="flex-grow p-4 md:p-8 overflow-y-auto">
-        
-        <!-- Tab Dashboard -->
         <section id="tab-dashboard" class="tab-content active space-y-6">
             <h2 class="text-2xl font-bold">Ringkasan Pengajuan</h2>
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6" id="stats-container"></div>
@@ -77,11 +72,10 @@
             </div>
         </section>
 
-        <!-- Tab Form (Input) -->
         <section id="tab-form" class="tab-content space-y-6">
             <div class="flex justify-between items-center">
                 <h2 id="form-title" class="text-2xl font-bold">Input Pengajuan Baru</h2>
-                <button id="cancel-edit-btn" onclick="cancelEdit()" class="hidden bg-rose-500/20 text-rose-500 px-4 py-2 rounded-xl text-xs font-bold">Batal Edit</button>
+                <button id="cancel-edit-btn" onclick="cancelEdit()" class="hidden bg-rose-500/20 text-rose-500 px-4 py-2 rounded-xl text-xs font-bold transition-all">Batal Edit</button>
             </div>
             <form id="notaForm" class="glass-card p-6 rounded-2xl space-y-6">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -130,7 +124,6 @@
             </form>
         </section>
 
-        <!-- Tab Database -->
         <section id="tab-database" class="tab-content space-y-6">
             <div class="flex flex-col md:flex-row justify-between items-end gap-4">
                 <h2 class="text-2xl font-bold">Database Cloud</h2>
@@ -156,7 +149,6 @@
             </div>
         </section>
 
-        <!-- Tab Report -->
         <section id="tab-report" class="tab-content space-y-6">
             <div class="flex flex-col md:flex-row justify-between items-end gap-4">
                 <h2 class="text-2xl font-bold">Laporan & PDF</h2>
@@ -171,7 +163,7 @@
                         </select>
                     </div>
                     <div class="flex flex-col">
-                        <label class="text-[9px] text-slate-500 uppercase font-bold mb-1">Status</label>
+                        <label class="text-[9px] text-slate-500 uppercase font-bold mb-1">Status Global</label>
                         <select id="rptStatus" class="bg-slate-800 p-2 rounded text-xs border border-slate-700">
                             <option value="all">Semua</option>
                             <option value="Proses">Proses</option>
@@ -207,11 +199,11 @@
         </section>
     </main>
 
-    <!-- Modal Update Status -->
+    <!-- Modal Status -->
     <div id="statusModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
         <div class="glass-card w-full max-w-md p-6 rounded-2xl border-slate-700">
             <h3 class="text-lg font-bold mb-1">Update Status Barang</h3>
-            <p id="modal-item-name" class="text-xs text-blue-400 mb-4"></p>
+            <p id="modal-item-name" class="text-xs text-blue-400 mb-4 font-semibold"></p>
             <div class="space-y-4">
                 <div>
                     <label class="text-[10px] uppercase text-slate-400 font-bold">Status Baru</label>
@@ -223,7 +215,7 @@
                 </div>
                 <div>
                     <label class="text-[10px] uppercase text-slate-400 font-bold">Keterangan/Alasan</label>
-                    <textarea id="item_ket" class="w-full p-3 rounded-xl h-24" placeholder="Misal: Barang sudah diterima bagian GA..."></textarea>
+                    <textarea id="item_ket" class="w-full p-3 rounded-xl h-24" placeholder="Misal: Barang sudah diterima..."></textarea>
                 </div>
                 <div class="flex gap-2 pt-2">
                     <button onclick="closeModal()" class="flex-1 bg-slate-700 py-3 rounded-xl font-bold hover:bg-slate-600 transition-colors">Batal</button>
@@ -234,7 +226,7 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "firebase/app";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
@@ -257,21 +249,27 @@
         let unsubscribe = null;
         const months = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 
-        // Inisialisasi Aplikasi & Autentikasi
         const init = async () => {
             try {
-                // Aturan Auth: Gunakan token jika ada, jika tidak login anonim
+                // Fix for Custom Token Mismatch error:
+                // Try to use the custom token if provided, but fallback to anonymous if it fails or mismatch occurs.
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
+                    try {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } catch (tokenErr) {
+                        console.warn("Custom token failed/mismatch, falling back to anonymous login.", tokenErr);
+                        await signInAnonymously(auth);
+                    }
                 } else {
                     await signInAnonymously(auth);
                 }
 
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
-                        document.getElementById('user-info').innerText = `Cloud ID: ${user.uid.substr(0,12)}...`;
-                        startSync(); // Mulai sinkronisasi data real-time
-                        document.getElementById('loading-overlay').style.display = 'none';
+                        document.getElementById('user-info').innerText = `Cloud ID: ${user.uid}`;
+                        startSync();
+                        document.getElementById('loading-overlay').style.opacity = '0';
+                        setTimeout(() => document.getElementById('loading-overlay').style.display = 'none', 500);
                     }
                 });
 
@@ -279,7 +277,7 @@
                 window.addItemRow();
                 window.generateTicketNumber();
             } catch (err) { 
-                console.error("Gagal inisialisasi Firebase:", err); 
+                console.error("Firebase Auth General Error:", err); 
                 document.getElementById('user-info').innerText = "Koneksi Bermasalah";
             }
         };
@@ -295,22 +293,17 @@
             document.getElementById('tgl_nota').valueAsDate = new Date();
         };
 
-        // Sinkronisasi Real-time dengan Cloud Firestore
         const startSync = () => {
             if (unsubscribe) unsubscribe();
-            
-            // Path Publik sesuai aturan: /artifacts/{appId}/public/data/{collectionName}
+            // Secure access path following RULE 1
             const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'rekap_nota');
-            
             unsubscribe = onSnapshot(colRef, 
                 (snap) => {
                     cloudData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                     renderDashboard();
                     renderDatabase();
                 },
-                (error) => {
-                    console.error("Firestore Error:", error);
-                }
+                (error) => { console.error("Firestore Sync Error:", error); }
             );
         };
 
@@ -325,12 +318,13 @@
             if(currentEditId) return;
             const kat = document.getElementById('kategori').value;
             const pref = kat === 'Nota Dinas' ? 'ND' : kat === 'Formulir' ? 'FM' : 'MM';
-            const ts = Date.now().toString().substr(-5);
-            document.getElementById('no_tiket').value = `${pref}-${ts}-${Math.floor(Math.random()*999)}`;
+            const dateStr = document.getElementById('tgl_nota').value.replace(/-/g, '').slice(2, 6);
+            const ts = Date.now().toString().slice(-4);
+            document.getElementById('no_tiket').value = `${pref}-${dateStr}-${ts}`;
         };
 
         window.addItemRow = (data = null) => {
-            const rowId = data ? data.rowId : 'item-' + Date.now() + Math.random().toString(16).substr(2,4);
+            const rowId = data ? data.rowId : 'item-' + Date.now() + Math.random().toString(16).slice(2,6);
             const html = `
                 <div class="item-row glass-card p-4 rounded-xl border border-slate-700/50 space-y-3" id="row-${rowId}">
                     <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
@@ -359,16 +353,14 @@
                 <div class="glass-card p-4 rounded-2xl border-l-4 border-l-emerald-500"><p class="text-[10px] text-emerald-500 font-bold uppercase">Selesai</p><p class="text-2xl font-bold">${s}</p></div>
                 <div class="glass-card p-4 rounded-2xl border-l-4 border-l-rose-500"><p class="text-[10px] text-rose-500 font-bold uppercase">Cancel</p><p class="text-2xl font-bold">${c}</p></div>
             `;
-            
-            // Urutkan data berdasarkan update terbaru untuk dashboard
+            // RULE 2: Filter/Sort in memory
             const sorted = [...cloudData].sort((a,b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
-            
             document.getElementById('recent-table-body').innerHTML = sorted.slice(0,5).map(n => `
                 <tr class="hover:bg-slate-800/20">
                     <td class="p-4 font-mono text-blue-400 font-bold">${n.tiket}</td>
                     <td class="p-4">${n.pemohon}</td>
-                    <td class="p-4 truncate max-w-[150px]">${n.items[0]?.name || '-'} ${n.items.length > 1 ? '(...)' : ''}</td>
-                    <td class="p-4 text-right"><span class="status-pill status-approved"><i class="fas fa-check-circle"></i> Terunggah</span></td>
+                    <td class="p-4 truncate max-w-[150px]">${n.items[0]?.name || '-'} ${n.items.length > 1 ? `(+${n.items.length-1})` : ''}</td>
+                    <td class="p-4 text-right"><span class="status-pill status-approved"><i class="fas fa-cloud-upload-alt"></i> Aktif</span></td>
                 </tr>
             `).join('');
         };
@@ -376,7 +368,6 @@
         window.renderDatabase = () => {
             const fBul = document.getElementById('filterBulan').value;
             const fTah = document.getElementById('filterTahun').value;
-            
             const filtered = cloudData.filter(n => {
                 const d = new Date(n.tgl);
                 return (fBul === 'all' || String(d.getMonth()+1).padStart(2,'0') === fBul) && (d.getFullYear().toString() === fTah);
@@ -409,17 +400,26 @@
                     </td>
                     <td class="p-4 text-right">
                         <div class="flex justify-end gap-1">
-                            <button onclick="window.editNota('${n.id}')" title="Edit Data" class="p-2 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"><i class="fas fa-edit"></i></button>
-                            <button onclick="window.deleteNota('${n.id}')" title="Hapus Data" class="p-2 text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors"><i class="fas fa-trash"></i></button>
+                            <button onclick="window.editNota('${n.id}')" class="p-2 text-blue-400 hover:bg-blue-400/10 rounded-lg"><i class="fas fa-edit"></i></button>
+                            <button onclick="window.deleteNota('${n.id}')" class="p-2 text-rose-500 hover:bg-rose-500/10 rounded-lg"><i class="fas fa-trash"></i></button>
                         </div>
                     </td>
                 </tr>
             `).join('');
         };
 
-        // Simpan atau Update ke Firestore
         document.getElementById('notaForm').onsubmit = async (e) => {
             e.preventDefault();
+            // RULE 3: Auth Before Queries
+            if (!auth.currentUser) {
+                alert("Sesi berakhir, silakan muat ulang halaman.");
+                return;
+            }
+
+            const btn = document.getElementById('submit-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+
             const items = Array.from(document.querySelectorAll('.item-row')).map(row => ({
                 rowId: row.querySelector('.item-row-id').value,
                 name: row.querySelector('.item-name').value,
@@ -449,8 +449,10 @@
                 window.cancelEdit();
                 window.switchTab('database');
             } catch (err) { 
-                console.error("Gagal simpan:", err);
-                alert("Gagal menyimpan ke Cloud. Periksa koneksi internet Anda."); 
+                console.error("Save error:", err);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save"></i> Simpan Data ke Cloud';
             }
         };
 
@@ -470,10 +472,10 @@
         };
 
         window.deleteNota = async (id) => { 
-            if(confirm('Data ini akan dihapus permanen dari cloud. Lanjutkan?')) {
+            if(confirm('Hapus permanen dari cloud?')) {
                 try {
                     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', id));
-                } catch (err) { alert("Gagal menghapus data."); }
+                } catch (err) { console.error(err); }
             }
         };
 
@@ -492,16 +494,14 @@
             const n = cloudData.find(x => x.id === currentEditId);
             const status = document.getElementById('newItemStatus').value;
             const ket = document.getElementById('item_ket').value;
-            
             const newItems = n.items.map(it => it.rowId === activeItemId ? {...it, status, ket} : it);
-            
             try {
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', currentEditId), {
                     items: newItems,
                     updatedAt: new Date().toISOString()
                 });
                 window.closeModal();
-            } catch (err) { alert("Gagal memperbarui status."); }
+            } catch (err) { console.error(err); }
         };
 
         window.closeModal = () => document.getElementById('statusModal').classList.add('hidden');
@@ -516,104 +516,92 @@
             window.generateTicketNumber();
         };
 
-        // Logika Laporan
-        window.getFilteredData = () => {
+        window.generatePreview = () => {
             const start = document.getElementById('rptStart').value;
             const end = document.getElementById('rptEnd').value;
             const kat = document.getElementById('rptKategori').value;
             const stat = document.getElementById('rptStatus').value;
-            
-            return cloudData.filter(n => {
-                const dOk = (!start || n.tgl >= start) && (!end || n.tgl <= end);
-                const kOk = kat === 'all' || n.kategori === kat;
-                return dOk && kOk;
-            }).map(n => {
-                const its = n.items.filter(it => stat === 'all' || it.status === stat);
-                return its.length > 0 ? {...n, items: its} : null;
-            }).filter(n => n !== null).sort((a,b) => a.tgl.localeCompare(b.tgl));
-        };
 
-        window.generatePreview = () => {
-            const data = window.getFilteredData();
-            if(data.length === 0) {
-                document.getElementById('report-preview-area').innerHTML = '<p class="text-center py-10 text-slate-500">Tidak ditemukan data yang sesuai kriteria filter.</p>';
+            const filtered = cloudData.filter(n => {
+                const dateOk = (!start || n.tgl >= start) && (!end || n.tgl <= end);
+                const katOk = kat === 'all' || n.kategori === kat;
+                return dateOk && katOk;
+            }).flatMap(n => n.items.map(it => ({...n, item: it})))
+              .filter(x => stat === 'all' || x.item.status === stat);
+
+            if(filtered.length === 0) {
+                document.getElementById('report-preview-area').innerHTML = '<p class="text-center py-10 text-slate-500 italic">Tidak ada data ditemukan</p>';
                 document.getElementById('download-btn-container').classList.add('hidden');
                 return;
             }
-            
+
             let html = `
-                <table class="w-full text-[10px] border-collapse border border-slate-700">
-                    <thead>
-                        <tr class="bg-slate-800 text-slate-300">
-                            <th class="p-2 border border-slate-700 text-left">Tgl / Tiket</th>
-                            <th class="p-2 border border-slate-700 text-left">Pemohon</th>
-                            <th class="p-2 border border-slate-700 text-left">Detail Barang</th>
-                            <th class="p-2 border border-slate-700 text-center">Status</th>
+                <table class="w-full text-left text-[11px]">
+                    <thead class="bg-slate-800 text-slate-400">
+                        <tr>
+                            <th class="p-2 border border-slate-700">Tgl</th>
+                            <th class="p-2 border border-slate-700">No. Tiket</th>
+                            <th class="p-2 border border-slate-700">Pemohon</th>
+                            <th class="p-2 border border-slate-700">Barang</th>
+                            <th class="p-2 border border-slate-700">Status</th>
+                            <th class="p-2 border border-slate-700">Keterangan</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-700">
+                    <tbody class="divide-y divide-slate-800">
+                        ${filtered.map(x => `
+                            <tr>
+                                <td class="p-2 border border-slate-800">${x.tgl}</td>
+                                <td class="p-2 border border-slate-800 font-mono">${x.tiket}</td>
+                                <td class="p-2 border border-slate-800">${x.pemohon}</td>
+                                <td class="p-2 border border-slate-800">${x.item.name} (x${x.item.qty})</td>
+                                <td class="p-2 border border-slate-800">${x.item.status}</td>
+                                <td class="p-2 border border-slate-800 italic text-[10px]">${x.item.ket || '-'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
             `;
-            
-            data.forEach(n => n.items.forEach(it => {
-                const sColor = it.status === 'Selesai' ? 'text-emerald-400' : it.status === 'Cancel' ? 'text-rose-400' : 'text-yellow-400';
-                html += `
-                    <tr>
-                        <td class="p-2 border border-slate-700">${n.tgl}<br><span class="font-mono text-blue-400 font-bold">${n.tiket}</span></td>
-                        <td class="p-2 border border-slate-700"><b>${n.pemohon}</b><br><span class="text-slate-500">${n.unit}</span></td>
-                        <td class="p-2 border border-slate-700">${it.name} (x${it.qty})<br><span class="text-[9px] text-slate-500 italic">${it.spec || '-'}</span></td>
-                        <td class="p-2 border border-slate-700 text-center font-bold ${sColor}">${it.status}</td>
-                    </tr>
-                `;
-            }));
-            
-            html += '</tbody></table>';
             document.getElementById('report-preview-area').innerHTML = html;
             document.getElementById('download-btn-container').classList.remove('hidden');
+            window.lastFiltered = filtered;
         };
 
         window.exportToPDF = () => {
             const { jsPDF } = window.jspdf;
-            const docPdf = new jsPDF('l', 'mm', 'a4');
-            const data = window.getFilteredData();
-            const rows = [];
-            
-            data.forEach(n => n.items.forEach(it => {
-                rows.push([n.tgl, n.tiket, n.pemohon, n.unit, `${it.name} (x${it.qty})\n${it.spec || '-'}`, it.status, it.ket || '-']);
-            }));
+            const doc = new jsPDF('l', 'mm', 'a4');
+            const data = window.lastFiltered;
 
-            docPdf.setFontSize(16);
-            docPdf.text('LAPORAN PENGAJUAN BARANG - E-NOTA CLOUD', 14, 15);
-            docPdf.setFontSize(10);
-            docPdf.text('Dicetak pada: ' + new Date().toLocaleString('id-ID'), 14, 20);
+            doc.setFontSize(18);
+            doc.setTextColor(15, 23, 42);
+            doc.text("LAPORAN REKAP PENGAJUAN BARANG", 14, 20);
             
-            docPdf.autoTable({
-                startY: 25,
-                head: [['Tanggal', 'Tiket', 'Pemohon', 'Unit', 'Detail Barang', 'Status', 'Keterangan']],
-                body: rows,
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, 26);
+
+            const tableData = data.map(x => [
+                x.tgl, 
+                x.tiket, 
+                `${x.pemohon}\n(${x.unit})`, 
+                `${x.item.name}\nQty: ${x.item.qty}\nSpec: ${x.item.spec || '-'}`, 
+                x.item.status, 
+                x.item.ket || '-'
+            ]);
+
+            doc.autoTable({
+                startY: 32,
+                head: [['Tanggal', 'No. Tiket', 'Pemohon', 'Detail Barang', 'Status', 'Keterangan']],
+                body: tableData,
                 theme: 'grid',
-                styles: { fontSize: 8, valign: 'middle' },
-                headStyles: { fillColor: [15, 23, 42], textColor: 255, halign: 'center' },
-                didDrawCell: (data) => {
-                    if (data.section === 'body' && data.column.index === 5) {
-                        const status = data.cell.raw;
-                        data.cell.styles.textColor = [255, 255, 255];
-                        data.cell.styles.fontStyle = 'bold';
-                        data.cell.styles.halign = 'center';
-
-                        if (status === 'Selesai') data.cell.styles.fillColor = [34, 197, 94];
-                        else if (status === 'Proses') {
-                            data.cell.styles.fillColor = [234, 179, 8];
-                            data.cell.styles.textColor = [0, 0, 0];
-                        } 
-                        else if (status === 'Cancel') data.cell.styles.fillColor = [239, 68, 68];
-                    }
-                }
+                styles: { fontSize: 8, cellPadding: 3 },
+                headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+                alternateRowStyles: { fillColor: [245, 247, 250] }
             });
-            docPdf.save(`E-Nota_Report_${Date.now()}.pdf`);
+
+            doc.save(`Laporan_Nota_Dinas_${Date.now()}.pdf`);
         };
 
-        // Jalankan Inisialisasi
-        window.onload = init;
+        init();
     </script>
 </body>
 </html>
