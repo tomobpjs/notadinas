@@ -28,17 +28,19 @@
 </head>
 <body class="min-h-screen flex flex-col md:flex-row">
 
+    <!-- Overlay Loading -->
     <div id="loading-overlay">
         <div class="spinner mb-4"></div>
-        <p class="text-blue-400 font-bold animate-pulse">Menyiapkan Database...</p>
+        <p class="text-blue-400 font-bold animate-pulse">Menghubungkan ke Cloud...</p>
     </div>
 
+    <!-- Sidebar -->
     <aside class="w-full md:w-64 glass-card border-r border-slate-700 flex flex-col shrink-0">
         <div class="p-6">
             <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent flex items-center gap-3">
                 <i class="fas fa-cloud"></i> E-NOTA v6.4
             </h1>
-            <div id="user-info" class="text-[10px] text-slate-400 mt-2 truncate">Auth...</div>
+            <div id="user-info" class="text-[10px] text-slate-400 mt-2 truncate">Mengautentikasi...</div>
         </div>
         <nav class="flex-grow">
             <ul class="space-y-1">
@@ -50,7 +52,10 @@
         </nav>
     </aside>
 
+    <!-- Konten Utama -->
     <main class="flex-grow p-4 md:p-8 overflow-y-auto">
+        
+        <!-- Tab Dashboard -->
         <section id="tab-dashboard" class="tab-content active space-y-6">
             <h2 class="text-2xl font-bold">Ringkasan Pengajuan</h2>
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6" id="stats-container"></div>
@@ -202,7 +207,7 @@
         </section>
     </main>
 
-    <!-- Modal Status -->
+    <!-- Modal Update Status -->
     <div id="statusModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
         <div class="glass-card w-full max-w-md p-6 rounded-2xl border-slate-700">
             <h3 class="text-lg font-bold mb-1">Update Status Barang</h3>
@@ -218,21 +223,22 @@
                 </div>
                 <div>
                     <label class="text-[10px] uppercase text-slate-400 font-bold">Keterangan/Alasan</label>
-                    <textarea id="item_ket" class="w-full p-3 rounded-xl h-24" placeholder="Keterangan..."></textarea>
+                    <textarea id="item_ket" class="w-full p-3 rounded-xl h-24" placeholder="Misal: Barang sudah diterima bagian GA..."></textarea>
                 </div>
                 <div class="flex gap-2 pt-2">
-                    <button onclick="closeModal()" class="flex-1 bg-slate-700 py-3 rounded-xl font-bold">Batal</button>
-                    <button onclick="saveItemStatus()" class="flex-1 bg-blue-600 py-3 rounded-xl font-bold">Simpan</button>
+                    <button onclick="closeModal()" class="flex-1 bg-slate-700 py-3 rounded-xl font-bold hover:bg-slate-600 transition-colors">Batal</button>
+                    <button onclick="saveItemStatus()" class="flex-1 bg-blue-600 py-3 rounded-xl font-bold hover:bg-blue-500 transition-colors">Simpan</button>
                 </div>
             </div>
         </div>
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { initializeApp } from "firebase/app";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+        // Konfigurasi Firebase (Disediakan oleh lingkungan Canvas)
         const firebaseConfig = {
   apiKey: "AIzaSyAOAMNE1yBVB09dbO-4Rr-D7KPODU0-694",
   authDomain: "notadinasrt.firebaseapp.com",
@@ -241,6 +247,10 @@
   messagingSenderId: "96523383307",
   appId: "1:96523383307:web:9a0bc43bd7f6375e050d0e"
 };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'e-nota-cloud-v6';
 
         let cloudData = [];
         let currentEditId = null;
@@ -248,24 +258,31 @@
         let unsubscribe = null;
         const months = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 
+        // Inisialisasi Aplikasi & Autentikasi
         const init = async () => {
             try {
+                // Aturan Auth: Gunakan token jika ada, jika tidak login anonim
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
                     await signInAnonymously(auth);
                 }
+
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
-                        document.getElementById('user-info').innerText = `Cloud ID: ${user.uid.substr(0,8)}`;
-                        startSync();
+                        document.getElementById('user-info').innerText = `Cloud ID: ${user.uid.substr(0,12)}...`;
+                        startSync(); // Mulai sinkronisasi data real-time
                         document.getElementById('loading-overlay').style.display = 'none';
                     }
                 });
+
                 initDropdowns();
                 window.addItemRow();
                 window.generateTicketNumber();
-            } catch (err) { console.error(err); }
+            } catch (err) { 
+                console.error("Gagal inisialisasi Firebase:", err); 
+                document.getElementById('user-info').innerText = "Koneksi Bermasalah";
+            }
         };
 
         const initDropdowns = () => {
@@ -279,14 +296,23 @@
             document.getElementById('tgl_nota').valueAsDate = new Date();
         };
 
+        // Sinkronisasi Real-time dengan Cloud Firestore
         const startSync = () => {
             if (unsubscribe) unsubscribe();
+            
+            // Path Publik sesuai aturan: /artifacts/{appId}/public/data/{collectionName}
             const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'rekap_nota');
-            unsubscribe = onSnapshot(colRef, (snap) => {
-                cloudData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                renderDashboard();
-                renderDatabase();
-            });
+            
+            unsubscribe = onSnapshot(colRef, 
+                (snap) => {
+                    cloudData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    renderDashboard();
+                    renderDatabase();
+                },
+                (error) => {
+                    console.error("Firestore Error:", error);
+                }
+            );
         };
 
         window.switchTab = (tab) => {
@@ -312,9 +338,9 @@
                         <div class="md:col-span-5"><label class="text-[9px] text-slate-500 uppercase font-bold">Barang</label><input type="text" class="item-name w-full p-2 rounded text-xs" value="${data?.name || ''}"></div>
                         <div class="md:col-span-2"><label class="text-[9px] text-slate-500 uppercase font-bold">Qty</label><input type="number" class="item-qty w-full p-2 rounded text-xs" value="${data?.qty || 1}"></div>
                         <div class="md:col-span-4"><label class="text-[9px] text-slate-500 uppercase font-bold">Spek</label><input type="text" class="item-spec w-full p-2 rounded text-xs" value="${data?.spec || ''}"></div>
-                        <div class="md:col-span-1 flex items-end justify-center"><button type="button" onclick="document.getElementById('row-${rowId}').remove()" class="text-rose-500"><i class="fas fa-trash"></i></button></div>
+                        <div class="md:col-span-1 flex items-end justify-center"><button type="button" onclick="document.getElementById('row-${rowId}').remove()" class="text-rose-500 hover:text-rose-400"><i class="fas fa-trash"></i></button></div>
                     </div>
-                    <input type="text" class="item-reason w-full p-2 rounded text-xs" value="${data?.reason || ''}" placeholder="Alasan Pengajuan">
+                    <input type="text" class="item-reason w-full p-2 rounded text-xs" value="${data?.reason || ''}" placeholder="Alasan Pengajuan / Urgensi">
                     <input type="hidden" class="item-status" value="${data?.status || 'Proses'}">
                     <input type="hidden" class="item-ket" value="${data?.ket || ''}">
                     <input type="hidden" class="item-row-id" value="${rowId}">
@@ -334,14 +360,24 @@
                 <div class="glass-card p-4 rounded-2xl border-l-4 border-l-emerald-500"><p class="text-[10px] text-emerald-500 font-bold uppercase">Selesai</p><p class="text-2xl font-bold">${s}</p></div>
                 <div class="glass-card p-4 rounded-2xl border-l-4 border-l-rose-500"><p class="text-[10px] text-rose-500 font-bold uppercase">Cancel</p><p class="text-2xl font-bold">${c}</p></div>
             `;
-            document.getElementById('recent-table-body').innerHTML = cloudData.slice(0,5).map(n => `
-                <tr class="hover:bg-slate-800/20"><td class="p-4 font-mono text-blue-400 font-bold">${n.tiket}</td><td class="p-4">${n.pemohon}</td><td class="p-4">${n.items[0]?.name || '-'}</td><td class="p-4 text-right"><span class="status-pill status-approved">Cloud</span></td></tr>
+            
+            // Urutkan data berdasarkan update terbaru untuk dashboard
+            const sorted = [...cloudData].sort((a,b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+            
+            document.getElementById('recent-table-body').innerHTML = sorted.slice(0,5).map(n => `
+                <tr class="hover:bg-slate-800/20">
+                    <td class="p-4 font-mono text-blue-400 font-bold">${n.tiket}</td>
+                    <td class="p-4">${n.pemohon}</td>
+                    <td class="p-4 truncate max-w-[150px]">${n.items[0]?.name || '-'} ${n.items.length > 1 ? '(...)' : ''}</td>
+                    <td class="p-4 text-right"><span class="status-pill status-approved"><i class="fas fa-check-circle"></i> Terunggah</span></td>
+                </tr>
             `).join('');
         };
 
         window.renderDatabase = () => {
             const fBul = document.getElementById('filterBulan').value;
             const fTah = document.getElementById('filterTahun').value;
+            
             const filtered = cloudData.filter(n => {
                 const d = new Date(n.tgl);
                 return (fBul === 'all' || String(d.getMonth()+1).padStart(2,'0') === fBul) && (d.getFullYear().toString() === fTah);
@@ -349,8 +385,15 @@
 
             document.getElementById('db-table-body').innerHTML = filtered.map(n => `
                 <tr class="align-top border-b border-slate-800/50">
-                    <td class="p-4"><div class="font-mono text-blue-400 font-bold">${n.tiket}</div><div class="text-[10px] text-slate-500">${n.tgl}</div></td>
-                    <td class="p-4"><div class="font-bold">${n.pemohon}</div><div class="text-[10px] text-slate-500">${n.unit}</div></td>
+                    <td class="p-4">
+                        <div class="font-mono text-blue-400 font-bold">${n.tiket}</div>
+                        <div class="text-[10px] text-slate-500">${n.tgl}</div>
+                        <div class="text-[10px] font-bold text-slate-600 mt-1">${n.kategori.toUpperCase()}</div>
+                    </td>
+                    <td class="p-4">
+                        <div class="font-bold">${n.pemohon}</div>
+                        <div class="text-[10px] text-slate-500">${n.unit}</div>
+                    </td>
                     <td class="p-4 space-y-2">
                         ${n.items.map(it => `
                             <div class="bg-slate-900/30 p-2 rounded-lg border border-slate-700/30 text-[11px]">
@@ -360,18 +403,22 @@
                                         ${it.status} <i class="fas fa-edit ml-1"></i>
                                     </button>
                                 </div>
-                                <div class="text-slate-500 italic">${it.spec || '-'}</div>
+                                <div class="text-slate-500 italic text-[10px] leading-tight">${it.spec || '-'}</div>
+                                ${it.ket ? `<div class="mt-1 text-[9px] text-blue-400 border-t border-slate-700/50 pt-1">Ket: ${it.ket}</div>` : ''}
                             </div>
                         `).join('')}
                     </td>
-                    <td class="p-4 text-right"><div class="flex justify-end gap-2">
-                        <button onclick="window.editNota('${n.id}')" class="p-2 text-blue-400"><i class="fas fa-edit"></i></button>
-                        <button onclick="window.deleteNota('${n.id}')" class="p-2 text-rose-500"><i class="fas fa-trash"></i></button>
-                    </div></td>
+                    <td class="p-4 text-right">
+                        <div class="flex justify-end gap-1">
+                            <button onclick="window.editNota('${n.id}')" title="Edit Data" class="p-2 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"><i class="fas fa-edit"></i></button>
+                            <button onclick="window.deleteNota('${n.id}')" title="Hapus Data" class="p-2 text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </td>
                 </tr>
             `).join('');
         };
 
+        // Simpan atau Update ke Firestore
         document.getElementById('notaForm').onsubmit = async (e) => {
             e.preventDefault();
             const items = Array.from(document.querySelectorAll('.item-row')).map(row => ({
@@ -383,26 +430,35 @@
                 status: row.querySelector('.item-status').value,
                 ket: row.querySelector('.item-ket').value
             }));
+
             const data = {
                 tgl: document.getElementById('tgl_nota').value,
                 tiket: document.getElementById('no_tiket').value,
                 kategori: document.getElementById('kategori').value,
                 pemohon: document.getElementById('nama_pemohon').value,
                 unit: document.getElementById('unit').value,
-                items, updatedAt: new Date().toISOString()
+                items, 
+                updatedAt: new Date().toISOString()
             };
+
             try {
-                if(currentEditId) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', currentEditId), data);
-                else await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'rekap_nota'), data);
+                if(currentEditId) {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', currentEditId), data);
+                } else {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'rekap_nota'), data);
+                }
                 window.cancelEdit();
                 window.switchTab('database');
-            } catch (err) { alert(err.message); }
+            } catch (err) { 
+                console.error("Gagal simpan:", err);
+                alert("Gagal menyimpan ke Cloud. Periksa koneksi internet Anda."); 
+            }
         };
 
         window.editNota = (id) => {
             const n = cloudData.find(x => x.id === id);
             currentEditId = id;
-            document.getElementById('form-title').innerText = "Edit " + n.tiket;
+            document.getElementById('form-title').innerText = "Edit Nota " + n.tiket;
             document.getElementById('cancel-edit-btn').classList.remove('hidden');
             document.getElementById('kategori').value = n.kategori;
             document.getElementById('tgl_nota').value = n.tgl;
@@ -414,12 +470,19 @@
             window.switchTab('form');
         };
 
-        window.deleteNota = async (id) => { if(confirm('Hapus permanen?')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', id)); };
+        window.deleteNota = async (id) => { 
+            if(confirm('Data ini akan dihapus permanen dari cloud. Lanjutkan?')) {
+                try {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', id));
+                } catch (err) { alert("Gagal menghapus data."); }
+            }
+        };
 
         window.openStatusModal = (nId, rId) => {
             const n = cloudData.find(x => x.id === nId);
             const it = n.items.find(x => x.rowId === rId);
-            currentEditId = nId; activeItemId = rId;
+            currentEditId = nId; 
+            activeItemId = rId;
             document.getElementById('modal-item-name').innerText = it.name;
             document.getElementById('newItemStatus').value = it.status;
             document.getElementById('item_ket').value = it.ket || '';
@@ -430,25 +493,37 @@
             const n = cloudData.find(x => x.id === currentEditId);
             const status = document.getElementById('newItemStatus').value;
             const ket = document.getElementById('item_ket').value;
+            
             const newItems = n.items.map(it => it.rowId === activeItemId ? {...it, status, ket} : it);
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', currentEditId), {items: newItems});
-            window.closeModal();
+            
+            try {
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', currentEditId), {
+                    items: newItems,
+                    updatedAt: new Date().toISOString()
+                });
+                window.closeModal();
+            } catch (err) { alert("Gagal memperbarui status."); }
         };
 
         window.closeModal = () => document.getElementById('statusModal').classList.add('hidden');
+        
         window.cancelEdit = () => {
-            currentEditId = null; document.getElementById('form-title').innerText = "Input Pengajuan Baru";
+            currentEditId = null; 
+            document.getElementById('form-title').innerText = "Input Pengajuan Baru";
             document.getElementById('cancel-edit-btn').classList.add('hidden');
             document.getElementById('notaForm').reset();
             document.getElementById('items-container').innerHTML = '';
-            window.addItemRow(); window.generateTicketNumber();
+            window.addItemRow(); 
+            window.generateTicketNumber();
         };
 
+        // Logika Laporan
         window.getFilteredData = () => {
             const start = document.getElementById('rptStart').value;
             const end = document.getElementById('rptEnd').value;
             const kat = document.getElementById('rptKategori').value;
             const stat = document.getElementById('rptStatus').value;
+            
             return cloudData.filter(n => {
                 const dOk = (!start || n.tgl >= start) && (!end || n.tgl <= end);
                 const kOk = kat === 'all' || n.kategori === kat;
@@ -462,14 +537,36 @@
         window.generatePreview = () => {
             const data = window.getFilteredData();
             if(data.length === 0) {
-                document.getElementById('report-preview-area').innerHTML = '<p class="text-center py-10 text-slate-500">Tidak ada data</p>';
+                document.getElementById('report-preview-area').innerHTML = '<p class="text-center py-10 text-slate-500">Tidak ditemukan data yang sesuai kriteria filter.</p>';
                 document.getElementById('download-btn-container').classList.add('hidden');
                 return;
             }
-            let html = '<table class="w-full text-[10px] border-collapse border border-slate-700"><thead><tr class="bg-slate-800"><th>Tgl/Tiket</th><th>Pemohon</th><th>Barang</th><th>Status</th></tr></thead><tbody>';
+            
+            let html = `
+                <table class="w-full text-[10px] border-collapse border border-slate-700">
+                    <thead>
+                        <tr class="bg-slate-800 text-slate-300">
+                            <th class="p-2 border border-slate-700 text-left">Tgl / Tiket</th>
+                            <th class="p-2 border border-slate-700 text-left">Pemohon</th>
+                            <th class="p-2 border border-slate-700 text-left">Detail Barang</th>
+                            <th class="p-2 border border-slate-700 text-center">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-700">
+            `;
+            
             data.forEach(n => n.items.forEach(it => {
-                html += `<tr><td class="p-2 border border-slate-700">${n.tgl}<br>${n.tiket}</td><td class="p-2 border border-slate-700">${n.pemohon}</td><td class="p-2 border border-slate-700">${it.name}</td><td class="p-2 border border-slate-700 font-bold ${it.status==='Selesai'?'text-emerald-400':it.status==='Cancel'?'text-rose-400':'text-yellow-400'}">${it.status}</td></tr>`;
+                const sColor = it.status === 'Selesai' ? 'text-emerald-400' : it.status === 'Cancel' ? 'text-rose-400' : 'text-yellow-400';
+                html += `
+                    <tr>
+                        <td class="p-2 border border-slate-700">${n.tgl}<br><span class="font-mono text-blue-400 font-bold">${n.tiket}</span></td>
+                        <td class="p-2 border border-slate-700"><b>${n.pemohon}</b><br><span class="text-slate-500">${n.unit}</span></td>
+                        <td class="p-2 border border-slate-700">${it.name} (x${it.qty})<br><span class="text-[9px] text-slate-500 italic">${it.spec || '-'}</span></td>
+                        <td class="p-2 border border-slate-700 text-center font-bold ${sColor}">${it.status}</td>
+                    </tr>
+                `;
             }));
+            
             html += '</tbody></table>';
             document.getElementById('report-preview-area').innerHTML = html;
             document.getElementById('download-btn-container').classList.remove('hidden');
@@ -480,43 +577,43 @@
             const docPdf = new jsPDF('l', 'mm', 'a4');
             const data = window.getFilteredData();
             const rows = [];
+            
             data.forEach(n => n.items.forEach(it => {
                 rows.push([n.tgl, n.tiket, n.pemohon, n.unit, `${it.name} (x${it.qty})\n${it.spec || '-'}`, it.status, it.ket || '-']);
             }));
 
             docPdf.setFontSize(16);
             docPdf.text('LAPORAN PENGAJUAN BARANG - E-NOTA CLOUD', 14, 15);
+            docPdf.setFontSize(10);
+            docPdf.text('Dicetak pada: ' + new Date().toLocaleString('id-ID'), 14, 20);
+            
             docPdf.autoTable({
-                startY: 22,
+                startY: 25,
                 head: [['Tanggal', 'Tiket', 'Pemohon', 'Unit', 'Detail Barang', 'Status', 'Keterangan']],
                 body: rows,
                 theme: 'grid',
                 styles: { fontSize: 8, valign: 'middle' },
                 headStyles: { fillColor: [15, 23, 42], textColor: 255, halign: 'center' },
                 didDrawCell: (data) => {
-                    // Cek jika sedang menggambar kolom Status (indeks 5)
                     if (data.section === 'body' && data.column.index === 5) {
                         const status = data.cell.raw;
-                        
-                        // Default warna teks putih untuk kontras latar belakang
                         data.cell.styles.textColor = [255, 255, 255];
                         data.cell.styles.fontStyle = 'bold';
                         data.cell.styles.halign = 'center';
 
-                        if (status === 'Selesai') {
-                            data.cell.styles.fillColor = [34, 197, 94]; // Emerald-500 (Hijau)
-                        } else if (status === 'Proses') {
-                            data.cell.styles.fillColor = [234, 179, 8]; // Yellow-500 (Kuning/Cokelat)
-                            data.cell.styles.textColor = [0, 0, 0]; // Teks hitam untuk kuning agar terbaca
-                        } else if (status === 'Cancel') {
-                            data.cell.styles.fillColor = [239, 68, 68]; // Red-500 (Merah)
-                        }
+                        if (status === 'Selesai') data.cell.styles.fillColor = [34, 197, 94];
+                        else if (status === 'Proses') {
+                            data.cell.styles.fillColor = [234, 179, 8];
+                            data.cell.styles.textColor = [0, 0, 0];
+                        } 
+                        else if (status === 'Cancel') data.cell.styles.fillColor = [239, 68, 68];
                     }
                 }
             });
-            docPdf.save(`E-Nota_Laporan_${Date.now()}.pdf`);
+            docPdf.save(`E-Nota_Report_${Date.now()}.pdf`);
         };
 
+        // Jalankan Inisialisasi
         window.onload = init;
     </script>
 </body>
