@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>E-Nota Dinas Cloud v1.0</title>
+    <title>E-Nota Dinas Cloud v6.4.2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #e2e8f0; font-size: 13px; overflow-x: hidden; }
         .glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
         .sidebar-link { transition: all 0.3s ease; border-left: 4px solid transparent; cursor: pointer; }
@@ -28,6 +28,8 @@
         .watermark { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 40; pointer-events: none; text-align: right; }
         .watermark-text { font-size: 10px; font-weight: 800; letter-spacing: 0.1em; color: rgba(255, 255, 255, 0.25); text-transform: uppercase; }
         .watermark-sub { font-size: 9px; color: rgba(71, 85, 105, 0.6); font-family: monospace; }
+        
+        .stat-value { font-size: 2.5rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col md:flex-row">
@@ -52,7 +54,7 @@
         <nav class="flex-grow">
             <ul class="space-y-1">
                 <li><a onclick="switchTab('dashboard')" class="sidebar-link active flex items-center gap-4 px-6 py-4" id="nav-dashboard"><i class="fas fa-chart-line w-5"></i> Dashboard</a></li>
-                <li><a onclick="switchTab('form')" class="sidebar-link flex items-center gap-4 px-6 py-4" id="nav-form"><i class="fas fa-plus-circle w-5"></i> Input Nota</a></li>
+                <li><a onclick="switchTab('form')" class="sidebar-link flex items-center gap-4 px-6 py-4" id="nav-form"><i class="fas fa-plus-circle w-5"></i> Input Pengajuan</a></li>
                 <li><a onclick="switchTab('database')" class="sidebar-link flex items-center gap-4 px-6 py-4" id="nav-database"><i class="fas fa-database w-5"></i> Database Cloud</a></li>
                 <li><a onclick="switchTab('report')" class="sidebar-link flex items-center gap-4 px-6 py-4" id="nav-report"><i class="fas fa-file-export w-5"></i> Cetak Laporan</a></li>
             </ul>
@@ -62,33 +64,47 @@
     <main class="flex-grow p-4 md:p-8 overflow-y-auto relative">
         <!-- Dashboard Section -->
         <section id="tab-dashboard" class="tab-content active space-y-6">
-            <div class="flex justify-between items-center">
-                <h2 class="text-2xl font-bold">Ringkasan Pengajuan</h2>
-                <div class="text-[10px] uppercase font-bold text-slate-500 bg-slate-800/50 px-3 py-1 rounded-lg border border-slate-700">
-                    Auto-Sync Active
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold">Ringkasan Pengajuan</h2>
+                    <p class="text-xs text-slate-500 font-medium">Analisis data performa real-time</p>
+                </div>
+                <div class="flex items-center gap-2 glass-card p-2 rounded-xl border-slate-700/50">
+                    <i class="fas fa-filter text-blue-400 text-xs ml-2"></i>
+                    <select id="dashFilterBulan" class="bg-transparent border-none text-[11px] font-bold uppercase py-1 px-2 focus:ring-0" onchange="window.renderDashboard()"></select>
+                    <select id="dashFilterTahun" class="bg-transparent border-none text-[11px] font-bold uppercase py-1 px-2 focus:ring-0" onchange="window.renderDashboard()"></select>
                 </div>
             </div>
+
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6" id="stats-container"></div>
-            <div class="glass-card rounded-2xl p-6">
-                <h3 class="font-bold mb-6 flex items-center gap-2 text-blue-400">
-                    <i class="fas fa-percentage"></i> Persentase Status Pengajuan (Per Barang)
-                </h3>
-                <div id="percentage-container" class="space-y-6"></div>
-            </div>
-            <div class="glass-card rounded-2xl p-6">
-                <h3 class="font-bold mb-4 flex items-center gap-2"><i class="fas fa-history text-blue-400"></i> Aktivitas Terbaru</h3>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left">
-                        <thead>
-                            <tr class="border-b border-slate-700 text-slate-500 text-[11px] uppercase">
-                                <th class="py-3 px-4">No. Tiket</th>
-                                <th class="py-3 px-4">Pemohon</th>
-                                <th class="py-3 px-4">Item Utama</th>
-                                <th class="py-3 px-4 text-right">Status Data</th>
-                            </tr>
-                        </thead>
-                        <tbody id="recent-table-body" class="divide-y divide-slate-800"></tbody>
-                    </table>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="glass-card rounded-2xl p-6 relative overflow-hidden">
+                    <div class="flex justify-between items-center mb-8">
+                        <h3 class="font-bold flex items-center gap-2 text-blue-400 uppercase text-xs tracking-wider">
+                            <i class="fas fa-chart-pie"></i> Analisis Persentase Status
+                        </h3>
+                        <span id="period-label" class="text-[9px] font-black bg-blue-500/10 text-blue-400 px-2 py-1 rounded border border-blue-500/20">SELURUH WAKTU</span>
+                    </div>
+                    <div id="percentage-container" class="space-y-8"></div>
+                </div>
+
+                <div class="glass-card rounded-2xl p-6">
+                    <h3 class="font-bold mb-4 flex items-center gap-2 text-xs uppercase tracking-wider text-slate-400">
+                        <i class="fas fa-history text-blue-400"></i> Aktivitas Sinkronisasi Terkini
+                    </h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="border-b border-slate-700 text-slate-500 text-[10px] uppercase">
+                                    <th class="py-3 px-2">Tiket</th>
+                                    <th class="py-3 px-2">Pemohon</th>
+                                    <th class="py-3 px-2 text-right">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-table-body" class="divide-y divide-slate-800"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </section>
@@ -97,13 +113,13 @@
         <section id="tab-form" class="tab-content space-y-6">
             <div class="flex justify-between items-center">
                 <h2 id="form-title" class="text-2xl font-bold">Input Pengajuan Baru</h2>
-                <button id="cancel-edit-btn" onclick="cancelEdit()" class="hidden bg-rose-500/20 text-rose-500 px-4 py-2 rounded-xl text-xs font-bold transition-all">Batal Edit</button>
+                <button id="cancel-edit-btn" onclick="window.cancelEdit()" class="hidden bg-rose-500/20 text-rose-500 px-4 py-2 rounded-xl text-xs font-bold transition-all">Batal Edit</button>
             </div>
             <form id="notaForm" class="glass-card p-6 rounded-2xl space-y-6">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div class="space-y-1">
                         <label class="text-[10px] uppercase text-slate-400 font-bold">Kategori Nota</label>
-                        <select id="kategori" class="w-full p-3 rounded-xl" onchange="generateTicketNumber()">
+                        <select id="kategori" class="w-full p-3 rounded-xl" onchange="window.generateTicketNumber()">
                             <option value="Nota Dinas">Nota Dinas (ND)</option>
                             <option value="Formulir">Formulir (FM)</option>
                             <option value="Memo">Memo (MM)</option>
@@ -111,7 +127,7 @@
                     </div>
                     <div class="space-y-1">
                         <label class="text-[10px] uppercase text-slate-400 font-bold">Tanggal</label>
-                        <input type="date" id="tgl_nota" class="w-full p-3 rounded-xl" onchange="generateTicketNumber()">
+                        <input type="date" id="tgl_nota" class="w-full p-3 rounded-xl" onchange="window.generateTicketNumber()">
                     </div>
                     <div class="space-y-1">
                         <label class="text-[10px] uppercase text-slate-400 font-bold">ID Unik (Otomatis)</label>
@@ -131,7 +147,7 @@
                 <div class="border-t border-slate-700 pt-6">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="font-bold text-blue-400 flex items-center gap-2"><i class="fas fa-boxes"></i> Daftar Barang</h3>
-                        <button type="button" onclick="addItemRow()" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-xs font-bold transition-all">+ Tambah Baris</button>
+                        <button type="button" onclick="window.addItemRow()" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-xs font-bold transition-all">+ Tambah Baris</button>
                     </div>
                     <div id="items-container" class="space-y-4"></div>
                 </div>
@@ -146,8 +162,8 @@
             <div class="flex flex-col md:flex-row justify-between items-end gap-4">
                 <h2 class="text-2xl font-bold">Database Cloud</h2>
                 <div class="flex gap-2">
-                    <select id="filterBulan" class="bg-slate-800 p-2 rounded text-xs border border-slate-700" onchange="renderDatabase()"></select>
-                    <select id="filterTahun" class="bg-slate-800 p-2 rounded text-xs border border-slate-700" onchange="renderDatabase()"></select>
+                    <select id="filterBulan" class="bg-slate-800 p-2 rounded text-xs border border-slate-700" onchange="window.renderDatabase()"></select>
+                    <select id="filterTahun" class="bg-slate-800 p-2 rounded text-xs border border-slate-700" onchange="window.renderDatabase()"></select>
                 </div>
             </div>
             <div class="glass-card rounded-2xl overflow-hidden">
@@ -200,7 +216,7 @@
                         <input type="date" id="rptEnd" class="bg-slate-800 p-2 rounded text-xs border border-slate-700">
                     </div>
                     <div class="flex items-end">
-                        <button onclick="generatePreview()" class="w-full bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded text-xs font-bold flex items-center justify-center gap-2 h-[34px]">
+                        <button onclick="window.generatePreview()" class="w-full bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded text-xs font-bold flex items-center justify-center gap-2 h-[34px]">
                             <i class="fas fa-search"></i> Cari & Preview
                         </button>
                     </div>
@@ -211,7 +227,7 @@
                     <p class="text-center py-10 text-slate-500 italic">Filter data untuk melihat preview di sini</p>
                 </div>
                 <div id="download-btn-container" class="mt-6 flex justify-center hidden">
-                    <button onclick="exportToPDF()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-10 py-3 rounded-xl font-bold flex items-center gap-3 shadow-xl transition-all">
+                    <button onclick="window.exportToPDF()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-10 py-3 rounded-xl font-bold flex items-center gap-3 shadow-xl transition-all">
                         <i class="fas fa-file-pdf text-xl"></i> Unduh PDF Full Color
                     </button>
                 </div>
@@ -238,8 +254,8 @@
                     <textarea id="item_ket" class="w-full p-3 rounded-xl h-24" placeholder="Misal: Barang sudah diterima..."></textarea>
                 </div>
                 <div class="flex gap-2 pt-2">
-                    <button onclick="closeModal()" class="flex-1 bg-slate-700 py-3 rounded-xl font-bold hover:bg-slate-600 transition-colors">Batal</button>
-                    <button onclick="saveItemStatus()" class="flex-1 bg-blue-600 py-3 rounded-xl font-bold hover:bg-blue-500 transition-colors">Simpan</button>
+                    <button onclick="window.closeModal()" class="flex-1 bg-slate-700 py-3 rounded-xl font-bold hover:bg-slate-600 transition-colors">Batal</button>
+                    <button onclick="window.saveItemStatus()" class="flex-1 bg-blue-600 py-3 rounded-xl font-bold hover:bg-blue-500 transition-colors">Simpan</button>
                 </div>
             </div>
         </div>
@@ -248,16 +264,16 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
-  apiKey: "AIzaSyAOAMNE1yBVB09dbO-4Rr-D7KPODU0-694",
-  authDomain: "notadinasrt.firebaseapp.com",
-  projectId: "notadinasrt",
-  storageBucket: "notadinasrt.firebasestorage.app",
-  messagingSenderId: "96523383307",
-  appId: "1:96523383307:web:03a32dfc68ac4389050d0e"
-};
+            apiKey: "AIzaSyAOAMNE1yBVB09dbO-4Rr-D7KPODU0-694",
+            authDomain: "notadinasrt.firebaseapp.com",
+            projectId: "notadinasrt",
+            storageBucket: "notadinasrt.firebasestorage.app",
+            messagingSenderId: "96523383307",
+            appId: "1:96523383307:web:03a32dfc68ac4389050d0e"
+        };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
@@ -272,14 +288,8 @@
         const init = async () => {
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    try {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } catch (tokenErr) {
-                        await signInAnonymously(auth);
-                    }
-                } else {
-                    await signInAnonymously(auth);
-                }
+                    try { await signInWithCustomToken(auth, __initial_auth_token); } catch (e) { await signInAnonymously(auth); }
+                } else { await signInAnonymously(auth); }
 
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
@@ -295,18 +305,26 @@
                 window.generateTicketNumber();
             } catch (err) { 
                 console.error("Firebase Auth General Error:", err); 
-                document.getElementById('user-info').innerText = "Koneksi Bermasalah";
             }
         };
 
         const initDropdowns = () => {
-            const yearEl = document.getElementById('filterTahun');
-            const monthEl = document.getElementById('filterBulan');
-            monthEl.innerHTML = '<option value="all">Semua Bulan</option>';
-            months.forEach((m, i) => monthEl.add(new Option(m, String(i+1).padStart(2,'0'))));
+            const yearIds = ['filterTahun', 'dashFilterTahun'];
+            const monthIds = ['filterBulan', 'dashFilterBulan'];
+            
+            monthIds.forEach(id => {
+                const el = document.getElementById(id);
+                el.innerHTML = '<option value="all">Semua Bulan</option>';
+                months.forEach((m, i) => el.add(new Option(m.toUpperCase(), String(i+1).padStart(2,'0'))));
+            });
+
             const curY = new Date().getFullYear();
-            for(let y=curY-1; y<=curY+2; y++) yearEl.add(new Option(y, y));
-            yearEl.value = curY;
+            yearIds.forEach(id => {
+                const el = document.getElementById(id);
+                for(let y=curY-1; y<=curY+2; y++) el.add(new Option(y, y));
+                el.value = curY;
+            });
+            
             document.getElementById('tgl_nota').valueAsDate = new Date();
         };
 
@@ -316,13 +334,14 @@
             unsubscribe = onSnapshot(colRef, 
                 (snap) => {
                     cloudData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                    renderDashboard();
-                    renderDatabase();
+                    window.renderDashboard();
+                    window.renderDatabase();
                 },
                 (error) => { console.error("Firestore Sync Error:", error); }
             );
         };
 
+        // --- EXPOSE FUNCTIONS TO GLOBAL SCOPE ---
         window.switchTab = (tab) => {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.sidebar-link').forEach(el => el.classList.remove('active'));
@@ -358,16 +377,27 @@
             document.getElementById('items-container').insertAdjacentHTML('beforeend', html);
         };
 
-        const renderDashboard = () => {
+        window.renderDashboard = () => {
+            const fBul = document.getElementById('dashFilterBulan').value;
+            const fTah = document.getElementById('dashFilterTahun').value;
+            
+            const label = fBul === 'all' ? `TAHUN ${fTah}` : `${months[parseInt(fBul)-1].toUpperCase()} ${fTah}`;
+            document.getElementById('period-label').innerText = label;
+
+            const filteredNota = cloudData.filter(n => {
+                const d = new Date(n.tgl);
+                return (fBul === 'all' || String(d.getMonth()+1).padStart(2,'0') === fBul) && (d.getFullYear().toString() === fTah);
+            });
+
             let p = 0, s = 0, c = 0;
             let totalItems = 0;
             
-            cloudData.forEach(n => {
+            filteredNota.forEach(n => {
                 n.items.forEach(it => {
                     totalItems++;
-                    if(it.status === 'Proses') p++; 
-                    else if(it.status === 'Selesai') s++; 
+                    if(it.status === 'Selesai') s++; 
                     else if(it.status === 'Cancel') c++;
+                    else p++;
                 });
             });
 
@@ -376,49 +406,69 @@
             const cPct = totalItems > 0 ? ((c/totalItems)*100).toFixed(1) : 0;
 
             document.getElementById('stats-container').innerHTML = `
-                <div class="glass-card p-4 rounded-2xl border-l-4 border-l-blue-500 shadow-lg"><p class="text-[10px] text-slate-400 font-bold uppercase">Total Nota</p><p class="text-2xl font-bold">${cloudData.length}</p></div>
-                <div class="glass-card p-4 rounded-2xl border-l-4 border-l-yellow-500 shadow-lg"><p class="text-[10px] text-yellow-500 font-bold uppercase">Proses</p><p class="text-2xl font-bold">${p}</p></div>
-                <div class="glass-card p-4 rounded-2xl border-l-4 border-l-emerald-500 shadow-lg"><p class="text-[10px] text-emerald-500 font-bold uppercase">Selesai</p><p class="text-2xl font-bold">${s}</p></div>
-                <div class="glass-card p-4 rounded-2xl border-l-4 border-l-rose-500 shadow-lg"><p class="text-[10px] text-rose-500 font-bold uppercase">Cancel</p><p class="text-2xl font-bold">${c}</p></div>
+                <div class="glass-card p-6 rounded-2xl border-l-4 border-l-blue-500 shadow-xl group transition-all hover:bg-slate-800/40">
+                    <p class="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mb-1">Total Nota (${label})</p>
+                    <p class="stat-value text-white">${filteredNota.length}</p>
+                    <div class="text-[9px] text-blue-400 font-bold mt-2 uppercase">Dokumen Cloud</div>
+                </div>
+                <div class="glass-card p-6 rounded-2xl border-l-4 border-l-yellow-500 shadow-xl group transition-all hover:bg-slate-800/40">
+                    <p class="text-[10px] text-yellow-500 font-bold uppercase tracking-tighter mb-1">Proses</p>
+                    <p class="stat-value text-yellow-500">${p}</p>
+                    <div class="text-[9px] text-slate-500 mt-2">Menunggu Eksekusi</div>
+                </div>
+                <div class="glass-card p-6 rounded-2xl border-l-4 border-l-emerald-500 shadow-xl group transition-all hover:bg-slate-800/40">
+                    <p class="text-[10px] text-emerald-500 font-bold uppercase tracking-tighter mb-1">Terpenuhi</p>
+                    <p class="stat-value text-emerald-500">${s}</p>
+                    <div class="text-[9px] text-emerald-500/50 mt-2">Selesai 100%</div>
+                </div>
+                <div class="glass-card p-6 rounded-2xl border-l-4 border-l-rose-500 shadow-xl group transition-all hover:bg-slate-800/40">
+                    <p class="text-[10px] text-rose-500 font-bold uppercase tracking-tighter mb-1">Cancel</p>
+                    <p class="stat-value text-rose-500">${c}</p>
+                    <div class="text-[9px] text-rose-500/50 mt-2">Batal / Gagal</div>
+                </div>
             `;
 
             document.getElementById('percentage-container').innerHTML = `
-                <div class="space-y-2">
+                <div class="space-y-3">
                     <div class="flex justify-between items-end">
-                        <span class="text-xs font-bold text-yellow-500 uppercase flex items-center gap-2"><i class="fas fa-spinner fa-spin"></i> Sedang Diproses</span>
-                        <span class="text-sm font-bold text-yellow-500">${pPct}%</span>
+                        <span class="text-[10px] font-black text-yellow-500 uppercase tracking-widest"><i class="fas fa-spinner fa-spin mr-2"></i> Dalam Antrian</span>
+                        <span class="text-lg font-black text-white">${pPct}<span class="text-xs font-normal text-slate-500">%</span></span>
                     </div>
-                    <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
-                        <div class="bg-yellow-500 h-full transition-all duration-1000" style="width: ${pPct}%"></div>
+                    <div class="w-full bg-slate-800/50 rounded-full h-3 overflow-hidden border border-slate-700/50 p-0.5">
+                        <div class="bg-gradient-to-r from-yellow-600 to-yellow-400 h-full rounded-full transition-all duration-1000" style="width: ${pPct}%"></div>
                     </div>
                 </div>
-                <div class="space-y-2">
+                <div class="space-y-3">
                     <div class="flex justify-between items-end">
-                        <span class="text-xs font-bold text-emerald-500 uppercase flex items-center gap-2"><i class="fas fa-check-circle"></i> Selesai / Terpenuhi</span>
-                        <span class="text-sm font-bold text-emerald-500">${sPct}%</span>
+                        <span class="text-[10px] font-black text-emerald-500 uppercase tracking-widest"><i class="fas fa-check-double mr-2"></i> Berhasil Selesai</span>
+                        <span class="text-lg font-black text-white">${sPct}<span class="text-xs font-normal text-slate-500">%</span></span>
                     </div>
-                    <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
-                        <div class="bg-emerald-500 h-full transition-all duration-1000" style="width: ${sPct}%"></div>
+                    <div class="w-full bg-slate-800/50 rounded-full h-3 overflow-hidden border border-slate-700/50 p-0.5">
+                        <div class="bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full transition-all duration-1000" style="width: ${sPct}%"></div>
                     </div>
                 </div>
-                <div class="space-y-2">
+                <div class="space-y-3">
                     <div class="flex justify-between items-end">
-                        <span class="text-xs font-bold text-rose-500 uppercase flex items-center gap-2"><i class="fas fa-times-circle"></i> Dibatalkan / Gagal</span>
-                        <span class="text-sm font-bold text-rose-500">${cPct}%</span>
+                        <span class="text-[10px] font-black text-rose-500 uppercase tracking-widest"><i class="fas fa-ban mr-2"></i> Dibatalkan</span>
+                        <span class="text-lg font-black text-white">${cPct}<span class="text-xs font-normal text-slate-500">%</span></span>
                     </div>
-                    <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
-                        <div class="bg-rose-500 h-full transition-all duration-1000" style="width: ${cPct}%"></div>
+                    <div class="w-full bg-slate-800/50 rounded-full h-3 overflow-hidden border border-slate-700/50 p-0.5">
+                        <div class="bg-gradient-to-r from-rose-600 to-rose-400 h-full rounded-full transition-all duration-1000" style="width: ${cPct}%"></div>
                     </div>
                 </div>
             `;
 
             const sorted = [...cloudData].sort((a,b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
             document.getElementById('recent-table-body').innerHTML = sorted.slice(0,5).map(n => `
-                <tr class="hover:bg-slate-800/20">
-                    <td class="p-4 font-mono text-blue-400 font-bold">${n.tiket}</td>
-                    <td class="p-4">${n.pemohon}</td>
-                    <td class="p-4 truncate max-w-[150px]">${n.items[0]?.name || '-'} ${n.items.length > 1 ? `(+${n.items.length-1})` : ''}</td>
-                    <td class="p-4 text-right"><span class="status-pill status-approved"><i class="fas fa-cloud-upload-alt"></i> Aktif</span></td>
+                <tr class="hover:bg-slate-800/20 group">
+                    <td class="py-4 px-2 font-mono text-blue-400 font-bold text-[11px]">${n.tiket}</td>
+                    <td class="py-4 px-2">
+                        <div class="font-bold text-slate-300">${n.pemohon}</div>
+                        <div class="text-[9px] text-slate-500 uppercase">${n.unit}</div>
+                    </td>
+                    <td class="py-4 px-2 text-right">
+                        <span class="status-pill status-approved text-[9px]"><i class="fas fa-check"></i> SYNCED</span>
+                    </td>
                 </tr>
             `).join('');
         };
@@ -436,16 +486,16 @@
                     <td class="p-4">
                         <div class="font-mono text-blue-400 font-bold">${n.tiket}</div>
                         <div class="text-[10px] text-slate-500">${n.tgl}</div>
-                        <div class="text-[10px] font-bold text-slate-600 mt-1">${n.kategori.toUpperCase()}</div>
+                        <div class="text-[10px] font-bold text-slate-600 mt-1 uppercase">${n.kategori}</div>
                     </td>
                     <td class="p-4">
                         <div class="font-bold">${n.pemohon}</div>
-                        <div class="text-[10px] text-slate-500">${n.unit}</div>
+                        <div class="text-[10px] text-slate-500 uppercase">${n.unit}</div>
                     </td>
                     <td class="p-4 space-y-2">
                         ${n.items.map(it => `
-                            <div class="bg-slate-800/50 p-2 rounded border border-slate-700/50 text-[10px] italic text-slate-300">
-                                ${it.reason || 'Tidak ada alasan dicantumkan'}
+                            <div class="bg-slate-800/50 p-2 rounded border border-slate-700/50 text-[10px] italic text-slate-400">
+                                ${it.reason || 'Tanpa keterangan alasan'}
                             </div>
                         `).join('')}
                     </td>
@@ -453,13 +503,12 @@
                         ${n.items.map(it => `
                             <div class="bg-slate-900/30 p-2 rounded-lg border border-slate-700/30 text-[11px]">
                                 <div class="flex justify-between items-center mb-1">
-                                    <span class="font-bold">${it.name} (x${it.qty})</span>
+                                    <span class="font-bold">${it.name} (${it.qty})</span>
                                     <button onclick="window.openStatusModal('${n.id}', '${it.rowId}')" class="status-pill ${it.status === 'Selesai' ? 'status-approved' : it.status === 'Cancel' ? 'status-rejected' : 'status-pending'}">
                                         ${it.status} <i class="fas fa-edit ml-1"></i>
                                     </button>
                                 </div>
-                                <div class="text-slate-500 italic text-[10px] leading-tight">${it.spec || '-'}</div>
-                                ${it.ket ? `<div class="mt-1 text-[9px] text-blue-400 border-t border-slate-700/50 pt-1">Ket: ${it.ket}</div>` : ''}
+                                <div class="text-slate-500 italic text-[10px]">${it.spec || '-'}</div>
                             </div>
                         `).join('')}
                     </td>
@@ -473,13 +522,148 @@
             `).join('');
         };
 
+        window.openStatusModal = (nId, rId) => {
+            const n = cloudData.find(x => x.id === nId);
+            const it = n.items.find(x => x.rowId === rId);
+            currentEditId = nId; activeItemId = rId;
+            document.getElementById('modal-item-name').innerText = it.name;
+            document.getElementById('newItemStatus').value = it.status;
+            document.getElementById('item_ket').value = it.ket || '';
+            document.getElementById('statusModal').classList.remove('hidden');
+        };
+
+        window.closeModal = () => document.getElementById('statusModal').classList.add('hidden');
+
+        window.saveItemStatus = async () => {
+            const n = cloudData.find(x => x.id === currentEditId);
+            const status = document.getElementById('newItemStatus').value;
+            const ket = document.getElementById('item_ket').value;
+            const newItems = n.items.map(it => it.rowId === activeItemId ? {...it, status, ket} : it);
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', currentEditId), { items: newItems, updatedAt: new Date().toISOString() });
+            window.closeModal();
+        };
+
+        window.editNota = (id) => {
+            const n = cloudData.find(x => x.id === id);
+            currentEditId = id;
+            document.getElementById('form-title').innerText = "Edit " + n.tiket;
+            document.getElementById('cancel-edit-btn').classList.remove('hidden');
+            document.getElementById('kategori').value = n.kategori;
+            document.getElementById('tgl_nota').value = n.tgl;
+            document.getElementById('no_tiket').value = n.tiket;
+            document.getElementById('nama_pemohon').value = n.pemohon;
+            document.getElementById('unit').value = n.unit;
+            document.getElementById('items-container').innerHTML = '';
+            n.items.forEach(it => window.addItemRow(it));
+            window.switchTab('form');
+        };
+
+        window.cancelEdit = () => {
+            currentEditId = null; 
+            document.getElementById('form-title').innerText = "Input Pengajuan Baru";
+            document.getElementById('cancel-edit-btn').classList.add('hidden');
+            document.getElementById('notaForm').reset();
+            document.getElementById('items-container').innerHTML = '';
+            window.addItemRow(); 
+            window.generateTicketNumber();
+        };
+
+        window.deleteNota = async (id) => { 
+            if(confirm('Hapus permanen?')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', id)); 
+        };
+
+        window.generatePreview = () => {
+            const start = document.getElementById('rptStart').value;
+            const end = document.getElementById('rptEnd').value;
+            const kat = document.getElementById('rptKategori').value;
+            const stat = document.getElementById('rptStatus').value;
+
+            const filtered = cloudData.filter(n => {
+                const dateOk = (!start || n.tgl >= start) && (!end || n.tgl <= end);
+                const katOk = kat === 'all' || n.kategori === kat;
+                return dateOk && katOk;
+            }).flatMap(n => n.items.map(it => ({...n, item: it})))
+              .filter(x => stat === 'all' || x.item.status === stat);
+
+            if(filtered.length === 0) {
+                document.getElementById('report-preview-area').innerHTML = '<p class="text-center py-10 text-slate-500 italic">Tidak ditemukan data yang sesuai filter</p>';
+                document.getElementById('download-btn-container').classList.add('hidden');
+                return;
+            }
+
+            let html = `
+                <table class="w-full text-left text-[11px]">
+                    <thead class="bg-slate-800 text-slate-400">
+                        <tr>
+                            <th class="p-2 border border-slate-700">Tgl</th>
+                            <th class="p-2 border border-slate-700">No. Tiket</th>
+                            <th class="p-2 border border-slate-700">Pemohon</th>
+                            <th class="p-2 border border-slate-700">Barang</th>
+                            <th class="p-2 border border-slate-700">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800">
+                        ${filtered.map(x => `
+                            <tr>
+                                <td class="p-2 border border-slate-800">${x.tgl}</td>
+                                <td class="p-2 border border-slate-800 font-mono">${x.tiket}</td>
+                                <td class="p-2 border border-slate-800">${x.pemohon}</td>
+                                <td class="p-2 border border-slate-800">${x.item.name} (${x.item.qty})</td>
+                                <td class="p-2 border border-slate-800 font-bold ${x.item.status === 'Selesai' ? 'text-emerald-500' : 'text-yellow-500'}">${x.item.status}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            document.getElementById('report-preview-area').innerHTML = html;
+            document.getElementById('download-btn-container').classList.remove('hidden');
+            window.lastFiltered = filtered;
+        };
+
+        window.exportToPDF = () => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l', 'mm', 'a4');
+            const data = window.lastFiltered;
+
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(22);
+            doc.setTextColor(30, 41, 59);
+            doc.text("REKAP PENGAJUAN BARANG RSU DADI KELUARGA", 14, 20);
+            
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, 28);
+
+            const tableData = data.map(x => [
+                x.tgl, x.tiket, `${x.pemohon}\n(${x.unit})`, 
+                x.item.reason || '-', `${x.item.name} (x${x.item.qty})\n${x.item.spec || '-'}`, 
+                x.item.status.toUpperCase(), x.item.ket || '-'
+            ]);
+
+            doc.autoTable({
+                startY: 35,
+                head: [['TANGGAL', 'NO. ID', 'PEMOHON', 'URGENSI', 'DETAIL BARANG', 'STATUS', 'KET']],
+                body: tableData,
+                theme: 'grid',
+                headStyles: { fillColor: [15, 23, 42], fontSize: 9, halign: 'center' },
+                styles: { fontSize: 8, valign: 'middle' },
+                columnStyles: { 1: { fontStyle: 'bold', textColor: [37, 99, 235] }, 5: { halign: 'center', fontStyle: 'bold' } },
+                didParseCell: function(data) {
+                    if (data.section === 'body' && data.column.index === 5) {
+                        const status = data.cell.raw;
+                        if (status === 'SELESAI') data.cell.styles.textColor = [5, 150, 105];
+                        else if (status === 'CANCEL') data.cell.styles.textColor = [185, 28, 28];
+                    }
+                }
+            });
+            doc.save(`Rekap_Laporan_${Date.now()}.pdf`);
+        };
+
         document.getElementById('notaForm').onsubmit = async (e) => {
             e.preventDefault();
-            if (!auth.currentUser) return;
-
             const btn = document.getElementById('submit-btn');
             btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
 
             const items = Array.from(document.querySelectorAll('.item-row')).map(row => ({
                 rowId: row.querySelector('.item-row-id').value,
@@ -497,8 +681,7 @@
                 kategori: document.getElementById('kategori').value,
                 pemohon: document.getElementById('nama_pemohon').value,
                 unit: document.getElementById('unit').value,
-                items, 
-                updatedAt: new Date().toISOString()
+                items, updatedAt: new Date().toISOString()
             };
 
             try {
@@ -516,195 +699,7 @@
             }
         };
 
-        window.editNota = (id) => {
-            const n = cloudData.find(x => x.id === id);
-            currentEditId = id;
-            document.getElementById('form-title').innerText = "Edit Nota " + n.tiket;
-            document.getElementById('cancel-edit-btn').classList.remove('hidden');
-            document.getElementById('kategori').value = n.kategori;
-            document.getElementById('tgl_nota').value = n.tgl;
-            document.getElementById('no_tiket').value = n.tiket;
-            document.getElementById('nama_pemohon').value = n.pemohon;
-            document.getElementById('unit').value = n.unit;
-            document.getElementById('items-container').innerHTML = '';
-            n.items.forEach(it => window.addItemRow(it));
-            window.switchTab('form');
-        };
-
-        window.deleteNota = async (id) => { 
-            if(confirm('Hapus permanen dari cloud?')) {
-                try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', id)); } catch (err) { console.error(err); }
-            }
-        };
-
-        window.openStatusModal = (nId, rId) => {
-            const n = cloudData.find(x => x.id === nId);
-            const it = n.items.find(x => x.rowId === rId);
-            currentEditId = nId; 
-            activeItemId = rId;
-            document.getElementById('modal-item-name').innerText = it.name;
-            document.getElementById('newItemStatus').value = it.status;
-            document.getElementById('item_ket').value = it.ket || '';
-            document.getElementById('statusModal').classList.remove('hidden');
-        };
-
-        window.saveItemStatus = async () => {
-            const n = cloudData.find(x => x.id === currentEditId);
-            const status = document.getElementById('newItemStatus').value;
-            const ket = document.getElementById('item_ket').value;
-            const newItems = n.items.map(it => it.rowId === activeItemId ? {...it, status, ket} : it);
-            try {
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rekap_nota', currentEditId), {
-                    items: newItems,
-                    updatedAt: new Date().toISOString()
-                });
-                window.closeModal();
-            } catch (err) { console.error(err); }
-        };
-
-        window.closeModal = () => document.getElementById('statusModal').classList.add('hidden');
-        
-        window.cancelEdit = () => {
-            currentEditId = null; 
-            document.getElementById('form-title').innerText = "Input Pengajuan Baru";
-            document.getElementById('cancel-edit-btn').classList.add('hidden');
-            document.getElementById('notaForm').reset();
-            document.getElementById('items-container').innerHTML = '';
-            window.addItemRow(); 
-            window.generateTicketNumber();
-        };
-
-        window.generatePreview = () => {
-            const start = document.getElementById('rptStart').value;
-            const end = document.getElementById('rptEnd').value;
-            const kat = document.getElementById('rptKategori').value;
-            const stat = document.getElementById('rptStatus').value;
-
-            const filtered = cloudData.filter(n => {
-                const dateOk = (!start || n.tgl >= start) && (!end || n.tgl <= end);
-                const katOk = kat === 'all' || n.kategori === kat;
-                return dateOk && katOk;
-            }).flatMap(n => n.items.map(it => ({...n, item: it})))
-              .filter(x => stat === 'all' || x.item.status === stat);
-
-            if(filtered.length === 0) {
-                document.getElementById('report-preview-area').innerHTML = '<p class="text-center py-10 text-slate-500 italic">Tidak ada data ditemukan</p>';
-                document.getElementById('download-btn-container').classList.add('hidden');
-                return;
-            }
-
-            let html = `
-                <table class="w-full text-left text-[11px]">
-                    <thead class="bg-slate-800 text-slate-400">
-                        <tr>
-                            <th class="p-2 border border-slate-700">Tgl</th>
-                            <th class="p-2 border border-slate-700">No. Tiket</th>
-                            <th class="p-2 border border-slate-700">Pemohon</th>
-                            <th class="p-2 border border-slate-700">Alasan / Urgensi</th>
-                            <th class="p-2 border border-slate-700">Barang</th>
-                            <th class="p-2 border border-slate-700">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-800">
-                        ${filtered.map(x => `
-                            <tr>
-                                <td class="p-2 border border-slate-800">${x.tgl}</td>
-                                <td class="p-2 border border-slate-800 font-mono">${x.tiket}</td>
-                                <td class="p-2 border border-slate-800">${x.pemohon}</td>
-                                <td class="p-2 border border-slate-800 italic text-slate-400">${x.item.reason || '-'}</td>
-                                <td class="p-2 border border-slate-800">${x.item.name} (x${x.item.qty})</td>
-                                <td class="p-2 border border-slate-800 font-bold ${x.item.status === 'Selesai' ? 'text-emerald-500' : x.item.status === 'Cancel' ? 'text-rose-500' : 'text-yellow-500'}">${x.item.status}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            `;
-            document.getElementById('report-preview-area').innerHTML = html;
-            document.getElementById('download-btn-container').classList.remove('hidden');
-            window.lastFiltered = filtered;
-        };
-
-        window.exportToPDF = () => {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('l', 'mm', 'a4');
-            const data = window.lastFiltered;
-
-            // Judul Laporan Modern
-            doc.setFont("helvetica", "bold");
-            doc.setFontSize(22);
-            doc.setTextColor(30, 41, 59);
-            doc.text("REKAPITULASI PENGAJUAN BARANG RSU DADI KELUARGA", 14, 20);
-            
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(10);
-            doc.setTextColor(100, 116, 139);
-            doc.text(`Periode Laporan: ${document.getElementById('rptStart').value || 'Awal'} s/d ${document.getElementById('rptEnd').value || 'Sekarang'}`, 14, 27);
-            doc.text(`Total Data: ${data.length} Transaksi`, 14, 32);
-
-            const tableData = data.map(x => [
-                x.tgl, 
-                x.tiket, 
-                `${x.pemohon}\n(${x.unit})`, 
-                x.item.reason || '-',
-                `${x.item.name} (x${x.item.qty})\nSpec: ${x.item.spec || '-'}`, 
-                x.item.status.toUpperCase(), 
-                x.item.ket || '-'
-            ]);
-
-            doc.autoTable({
-                startY: 40,
-                head: [['TANGGAL', 'NO. ID', 'PEMOHON', 'ALASAN / URGENSI', 'DETAIL BARANG & JUMLAH', 'STATUS', 'KETERANGAN']],
-                body: tableData,
-                theme: 'grid',
-                headStyles: { 
-                    fillColor: [15, 23, 42], 
-                    textColor: [255, 255, 255], 
-                    fontStyle: 'bold', 
-                    halign: 'center',
-                    fontSize: 9
-                },
-                styles: { 
-                    fontSize: 8, 
-                    cellPadding: 4, 
-                    valign: 'middle',
-                    lineColor: [226, 232, 240],
-                    lineWidth: 0.1
-                },
-                columnStyles: {
-                    0: { halign: 'center', cellWidth: 22 },
-                    1: { fontStyle: 'bold', textColor: [37, 99, 235], cellWidth: 30 },
-                    3: { cellWidth: 45, fontStyle: 'italic' },
-                    5: { halign: 'center', fontStyle: 'bold', cellWidth: 25 }
-                },
-                // Fungsi untuk mewarnai kolom Status secara dinamis
-                didParseCell: function(data) {
-                    if (data.section === 'body' && data.column.index === 5) {
-                        const status = data.cell.raw;
-                        if (status === 'SELESAI') {
-                            data.cell.styles.fillColor = [209, 250, 229]; // Hijau Muda
-                            data.cell.styles.textColor = [5, 150, 105];   // Hijau Tua
-                        } else if (status === 'PROSES') {
-                            data.cell.styles.fillColor = [254, 249, 195]; // Kuning Muda
-                            data.cell.styles.textColor = [161, 98, 7];    // Kuning Tua
-                        } else if (status === 'CANCEL') {
-                            data.cell.styles.fillColor = [254, 226, 226]; // Merah Muda
-                            data.cell.styles.textColor = [185, 28, 28];   // Merah Tua
-                        }
-                    }
-                },
-                margin: { left: 14, right: 14 }
-            });
-
-            // Footer Penutup
-            const finalY = doc.lastAutoTable.finalY + 15;
-            doc.setFontSize(9);
-            doc.setTextColor(148, 163, 184);
-            doc.text("Laporan ini dihasilkan secara otomatis oleh Sistem E-Rekap Unit Rumah Tangga v1.0.", 14, finalY);
-
-            doc.save(`Laporan_Nota_Dinas_${Date.now()}.pdf`);
-        };
-
-            init();
-        </script>
+        init();
+    </script>
 </body>
 </html>
